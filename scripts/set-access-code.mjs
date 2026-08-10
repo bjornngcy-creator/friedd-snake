@@ -86,7 +86,10 @@ async function main() {
     process.exit(1);
   }
 
-  const codeHash = bcrypt.hashSync(code, 10);
+  // Codes are case-insensitive: normalize to uppercase + trim before hashing,
+  // matching the normalization applied when verifying (src/lib/actions/access-code.ts).
+  const normalizedCode = code.trim().toUpperCase();
+  const codeHash = bcrypt.hashSync(normalizedCode, 10);
 
   const supabase = createClient(url, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },

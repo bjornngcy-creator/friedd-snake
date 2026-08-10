@@ -24,14 +24,31 @@ developer — follow it top to bottom the first time you set this up.
    - `FINNHUB_API_KEY` — not used yet in Phase 1, leave the placeholder.
 3. `.env.local` is gitignored and never committed.
 
-## 3. Run the database migration
+## 3. Run the database migrations
 
-1. In the Supabase dashboard, open **SQL Editor**.
-2. Open `supabase/migrations/0001_init.sql` in this project, copy the whole
-   file, paste it into the SQL Editor, and run it.
-3. This creates the `profiles`, `access_codes`, and `user_access` tables,
-   the security rules on them, and seeds a dev-only access code
-   (`WELCOME2026`) for the current month.
+**Option A — the migration runner (recommended):** add
+`SUPABASE_DB_PASSWORD` (Project Settings -> Database -> Connection string)
+to `.env.local`, run `npm install`, then:
+
+```bash
+node scripts/db-migrate.mjs
+```
+
+This connects directly to the database (via the session pooler) and applies
+every file in `supabase/migrations/` that hasn't already run yet, tracked in
+a `_migrations` table. Use `node scripts/db-migrate.mjs --status` to see
+what's applied/pending without changing anything.
+
+**Option B — the SQL Editor:** open each file in `supabase/migrations/` in
+order (`0001_init.sql`, `0002_security.sql`, ...), paste into the Supabase
+SQL Editor, and run it. If you use this option, the migrations won't be
+tracked in `_migrations` — keep a manual note of what you've run.
+
+This creates the `profiles`, `access_codes`, `user_access`, and
+`access_code_attempts` tables (plus, once Phase 2 lands,
+`framework_versions`, `evaluations`, and `ticker_cache`), the security rules
+on them, and seeds a dev-only access code (`WELCOME2026`) for the current
+month.
 
 ## 4. Turn off email confirmation
 
@@ -81,9 +98,19 @@ The dev seed code from the migration (`WELCOME2026`) only exists for local
 testing — rotate it with one of the options above before real students get
 access.
 
-Two things to know: the code is **case-sensitive**, so send students the
-exact characters; and a new month means a new lock — set the next month's
-code before the 1st (Singapore time) or everyone is locked out until you do.
+Two things to know: the code is **case-insensitive** (it's normalized to
+uppercase and trimmed before hashing and before checking, so `welcome2026`,
+`WELCOME2026`, and `  Welcome2026  ` all work identically); and a new month
+means a new lock — set the next month's code before the 1st (Singapore time)
+or everyone is locked out until you do.
+
+**Brute-force lockout:** 5 consecutive wrong attempts locks a student out of
+further access-code attempts for 1 hour (tracked in
+`access_code_attempts`). The counter resets automatically on a correct
+attempt, and the lock clears itself after an hour — no admin action needed.
+
+**Admins skip the code entirely.** Any user with `profiles.is_admin = true`
+never sees the access-code screen — the monthly gate is bypassed for them.
 
 ## 7. Run it locally
 

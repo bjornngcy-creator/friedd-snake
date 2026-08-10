@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { hasCurrentMonthAccess } from "@/lib/access";
+import { hasCurrentMonthAccess, isAdmin } from "@/lib/access";
 import { AccessCodeForm } from "@/components/access-code-form";
 
 export default async function AccessCodePage() {
@@ -13,6 +13,11 @@ export default async function AccessCodePage() {
   // to reason about on its own.
   if (!user) {
     redirect("/login");
+  }
+
+  // Admins bypass the monthly gate entirely — never show them this page.
+  if (await isAdmin(supabase, user.id)) {
+    redirect("/dashboard");
   }
 
   if (await hasCurrentMonthAccess(supabase, user.id)) {

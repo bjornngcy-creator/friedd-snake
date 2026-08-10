@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "set-access-code": "node scripts/set-access-code.mjs"
+    "set-access-code": "node scripts/set-access-code.mjs",
+    "db-migrate": "node scripts/db-migrate.mjs",
+    "verify-scoring": "node scripts/verify-scoring.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",
@@ -22,10 +24,12 @@
     "@tailwindcss/postcss": "^4",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
+    "@types/pg": "^8.21.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.0",
+    "pg": "^8.23.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

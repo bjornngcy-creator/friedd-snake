@@ -1,4 +1,6 @@
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { hasCurrentMonthAccess, isAdmin } from "@/lib/access";
 import { getPublishedFramework } from "@/lib/framework";
 import { getTickerInfo } from "@/lib/ticker";
 import { EvaluationForm } from "@/components/evaluation-form";
@@ -21,6 +23,19 @@ export default async function EvaluationPage({
   // to reason about on its own.
   if (!user) {
     return <ErrorState message="You need to be logged in to see this." />;
+  }
+
+  // Re-check the monthly access gate here, not just in the (gated) layout.
+  // Layouts and pages render concurrently, so the layout's redirect() does
+  // NOT stop this page's body from running — without this check a student
+  // who has never entered the code (or is locked out) still triggers the
+  // Finnhub lookup and the evaluations insert below, burning API quota and
+  // leaving phantom rows they'd see the moment they do unlock.
+  if (
+    !(await isAdmin(supabase, user.id)) &&
+    !(await hasCurrentMonthAccess(supabase, user.id))
+  ) {
+    redirect("/access-code");
   }
 
   const framework = await getPublishedFramework(supabase);

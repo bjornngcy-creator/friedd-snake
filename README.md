@@ -1,8 +1,9 @@
 # FRIEDD SNAKE — Stock Evaluator
 
-Phase 1: scaffold, auth, and the monthly access-code gate. Built for ~150
-Invest With Bjorn students. This README is written for the owner, not a
-developer — follow it top to bottom the first time you set this up.
+Phase 1: scaffold, auth, and the monthly access-code gate. Phase 2: the
+FRIEDD SNAKE evaluation tool itself. Built for ~150 Invest With Bjorn
+students. This README is written for the owner, not a developer — follow it
+top to bottom the first time you set this up.
 
 ## 1. Create the Supabase project
 
@@ -21,7 +22,9 @@ developer — follow it top to bottom the first time you set this up.
    - `SUPABASE_SERVICE_ROLE_KEY` — the `service_role` key. **Keep this
      secret** — it bypasses all database security rules. Never put it in
      anything that ships to the browser.
-   - `FINNHUB_API_KEY` — not used yet in Phase 1, leave the placeholder.
+   - `FINNHUB_API_KEY` — used in Phase 2 for ticker price/name auto-fill.
+     Get a free key at [finnhub.io](https://finnhub.io/register). Server-only
+     — never exposed to the browser.
 3. `.env.local` is gitignored and never committed.
 
 ## 3. Run the database migrations
@@ -40,15 +43,16 @@ a `_migrations` table. Use `node scripts/db-migrate.mjs --status` to see
 what's applied/pending without changing anything.
 
 **Option B — the SQL Editor:** open each file in `supabase/migrations/` in
-order (`0001_init.sql`, `0002_security.sql`, ...), paste into the Supabase
-SQL Editor, and run it. If you use this option, the migrations won't be
-tracked in `_migrations` — keep a manual note of what you've run.
+order (`0001_init.sql`, `0002_security.sql`, `0003_phase2_core.sql`), paste
+into the Supabase SQL Editor, and run it. If you use this option, the
+migrations won't be tracked in `_migrations` — keep a manual note of what
+you've run.
 
-This creates the `profiles`, `access_codes`, `user_access`, and
-`access_code_attempts` tables (plus, once Phase 2 lands,
-`framework_versions`, `evaluations`, and `ticker_cache`), the security rules
-on them, and seeds a dev-only access code (`WELCOME2026`) for the current
-month.
+This creates the `profiles`, `access_codes`, `user_access`,
+`access_code_attempts`, `framework_versions`, `evaluations`, and
+`ticker_cache` tables, the security rules on them, seeds a dev-only access
+code (`WELCOME2026`) for the current month, and seeds framework version 1
+(the full FRIEDD SNAKE scoring definition that drives the evaluation form).
 
 ## 4. Turn off email confirmation
 
@@ -127,16 +131,45 @@ Open [http://localhost:3000](http://localhost:3000). New students go
 - Email + password signup/login/logout (`/signup`, `/login`).
 - Monthly access-code gate (`/access-code`) — once unlocked for a
   calendar month, a student stays unlocked until the month changes.
-- `/dashboard` — placeholder, real evaluation tools come in Phase 2.
+  5 consecutive wrong attempts locks a student out for 1 hour. Admins
+  (`profiles.is_admin = true`) bypass this gate entirely.
 - `/admin` — placeholder, gated on `profiles.is_admin`; 404s for
   everyone else.
 
+## What's in Phase 2
+
+- `/dashboard` — greeting, ticker quick-input, Equity Scope link, stat
+  cards (companies evaluated / passed / drafts), and a table of the
+  student's evaluations (click a row to open it, delete with confirm).
+- `/evaluation/[ticker]` — the FRIEDD SNAKE scoring form. Rendered
+  entirely from the `framework_versions` definition in the database (no
+  criteria hardcoded in components): F.R.I.E.D.D → Others → SNAKE Risks →
+  Moats, each with its own definition/help text, source link, and the
+  scale (0/1/2) or flag (present/absent) input the spec calls for. A
+  sticky score panel shows the live running score and PASS/FAIL verdict
+  (desktop sidebar / mobile collapsible bar). Inputs autosave a few
+  hundred milliseconds after you stop typing.
+- Ticker price + company name auto-fill via Finnhub (`src/lib/ticker.ts`),
+  cached in `ticker_cache` for 24h. Server-only — the Finnhub key never
+  reaches the browser.
+- The scoring math (F.R.I.E.D.D / Others / Risks / Moats rollup, 0-20 raw
+  score, rescale to /10, PASS at ≥7.0) lives in one shared module,
+  `src/lib/scoring.ts`, used by both the live client-side preview and the
+  server-side autosave. `npm run verify-scoring` reproduces the spec's
+  worked GOOGL example (raw 16, final 8.0, PASS) through that module.
+- **Not in Phase 2:** Step 2 Valuations (the three entry-price models, PEG
+  verdict, and full DCF). The dashboard's "Valuation" column is a
+  placeholder (`—`) until that's built.
+
 ## Notes for future development
 
-- Deployment target is Cloudflare Pages (not set up yet in Phase 1).
+- Deployment target is Cloudflare Pages (not set up yet).
 - Route protection is layered: `src/proxy.ts` (Next.js 16's rename of
   `middleware.ts`) does a coarse "are you logged in" check on every
   request, and `src/app/(authed)/(gated)/layout.tsx` does the real
-  monthly-access check. Don't rely on proxy alone for authorization —
-  Next.js's own guidance is that a matcher change can silently stop
-  covering a route.
+  monthly-access check (and the admin bypass). Don't rely on proxy alone
+  for authorization — Next.js's own guidance is that a matcher change can
+  silently stop covering a route.
+- `scripts/db-migrate.mjs` connects directly to Postgres (session pooler)
+  to apply migrations — see step 3 above. It tracks what's applied in a
+  `_migrations` table so it's safe to re-run.

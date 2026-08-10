@@ -251,7 +251,7 @@ function CriterionRow({
           )}
         </div>
 
-        <div className="shrink-0">
+        <div className="max-w-full shrink-0">
           {criterion.input_type === "scale" ? (
             <ScaleInput criterion={criterion} value={value as number | null | undefined} onChange={onChange} />
           ) : (
@@ -273,7 +273,7 @@ function ScaleInput({
   onChange: (value: number | undefined) => void;
 }) {
   return (
-    <div className="flex gap-1.5" role="radiogroup" aria-label={criterion.label}>
+    <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label={criterion.label}>
       {(criterion.options ?? []).map((option) => {
         const selected = value === option.value;
         return (

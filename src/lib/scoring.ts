@@ -74,19 +74,68 @@ export type ScoreResult = {
   total_answered: number;
 };
 
-function isAnswered(value: number | boolean | null | undefined): boolean {
-  return value !== undefined && value !== null;
-}
-
-function pointsFor(criterion: Criterion, value: number | boolean | null | undefined): number {
-  if (!isAnswered(value)) return 0;
+/**
+ * Coerces a stored/submitted answer into a value this criterion actually
+ * allows, or null if it isn't a legal answer. Scale criteria only accept a
+ * value the criterion itself offers as an option; flag criteria only accept
+ * a real boolean. Anything else (out-of-range numbers, junk strings, values
+ * for criteria that don't exist) is treated as unanswered rather than being
+ * fed into the arithmetic — the inputs JSON arrives from the client, so it
+ * can never be trusted to be in range.
+ */
+function normalizedValue(
+  criterion: Criterion,
+  value: number | boolean | null | undefined
+): number | boolean | null {
+  if (value === undefined || value === null) return null;
 
   if (criterion.input_type === "scale") {
-    return Number(value);
+    if (typeof value === "boolean") return null;
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return null;
+    const allowed = (criterion.options ?? []).map((option) => option.value);
+    // A criterion with no declared options has no allowlist to enforce —
+    // accept any finite number rather than silently discarding every answer.
+    if (allowed.length === 0) return numeric;
+    return allowed.includes(numeric) ? numeric : null;
   }
 
   // flag
-  return value === true ? (criterion.flag_effect ?? 0) : 0;
+  return typeof value === "boolean" ? value : null;
+}
+
+function pointsFor(criterion: Criterion, value: number | boolean | null | undefined): number {
+  const normalized = normalizedValue(criterion, value);
+  if (normalized === null) return 0;
+
+  if (criterion.input_type === "scale") {
+    return normalized as number;
+  }
+
+  // flag
+  return normalized === true ? (criterion.flag_effect ?? 0) : 0;
+}
+
+/**
+ * Strips a raw inputs object down to legal answers only: known criterion
+ * keys, values the criterion allows. Used server-side before scoring and
+ * persisting so a hand-crafted request can't store an out-of-range answer
+ * (and with it a bogus score) on an evaluation.
+ */
+export function sanitizeInputs(
+  framework: FrameworkDefinition,
+  inputs: EvaluationInputs
+): EvaluationInputs {
+  const clean: EvaluationInputs = {};
+
+  for (const section of framework.sections) {
+    for (const criterion of section.criteria) {
+      const normalized = normalizedValue(criterion, inputs[criterion.key]);
+      if (normalized !== null) clean[criterion.key] = normalized;
+    }
+  }
+
+  return clean;
 }
 
 /**
@@ -110,7 +159,7 @@ export function computeScore(
 
     for (const criterion of section.criteria) {
       const value = inputs[criterion.key];
-      if (isAnswered(value)) answered++;
+      if (normalizedValue(criterion, value) !== null) answered++;
       subtotal += pointsFor(criterion, value);
     }
 

@@ -1,7 +1,12 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { computeScore, type EvaluationInputs, type FrameworkDefinition } from "@/lib/scoring";
+import {
+  computeScore,
+  sanitizeInputs,
+  type EvaluationInputs,
+  type FrameworkDefinition,
+} from "@/lib/scoring";
 
 export type SaveEvaluationResult =
   | {
@@ -55,12 +60,15 @@ export async function saveEvaluationInputs(
   }
 
   const framework = frameworkRow.definition as FrameworkDefinition;
-  const score = computeScore(framework, inputs);
+  // `inputs` comes straight off the client — drop unknown keys and any value
+  // the criterion doesn't actually allow before scoring or persisting it.
+  const cleanInputs = sanitizeInputs(framework, inputs);
+  const score = computeScore(framework, cleanInputs);
 
   const { error } = await supabase
     .from("evaluations")
     .update({
-      inputs,
+      inputs: cleanInputs,
       raw_score: score.raw_total,
       final_score: score.final_score,
       verdict: score.verdict,

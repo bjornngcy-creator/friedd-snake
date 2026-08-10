@@ -43,6 +43,12 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
+**For developers / Claude Code:** a fresh clone will fail `npx tsc --noEmit` until
+`npm run dev` (or `next build`) has been run at least once — Next.js generates some
+ambient route type files on first run that TypeScript needs, and those files aren't
+stored in GitHub (this is normal Next.js behavior, not a bug). Running `npm run dev`
+as part of the setup above takes care of it automatically.
+
 ## That's it
 
 You do not need to deploy anything yourself. Every push to the `main` branch on

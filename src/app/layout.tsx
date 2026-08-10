@@ -8,7 +8,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "FRIEDD SNAKE — Stock Evaluator",
+  title: "BPC Stock Evaluator",
   description: "Stock evaluation tool for Invest With Bjorn students.",
 };
 

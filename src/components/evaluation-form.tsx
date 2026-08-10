@@ -287,7 +287,7 @@ function ScaleInput({
             className={`min-w-[64px] rounded-md border px-3 py-2 text-xs font-semibold transition ${
               selected
                 ? "border-brand bg-brand text-white"
-                : "border-slate-300 bg-white text-slate-600 hover:border-brand hover:text-brand"
+                : "border-amber-200 bg-[#FFFBEA] text-slate-600 hover:border-brand hover:text-brand"
             }`}
           >
             {option.label}
@@ -311,7 +311,11 @@ function FlagInput({
   const sign = (criterion.flag_effect ?? 0) >= 0 ? "+" : "";
 
   return (
-    <label className="flex cursor-pointer items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-brand">
+    <label
+      className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-xs font-semibold transition hover:border-brand ${
+        isPresent ? "border-brand bg-brand/5 text-slate-900" : "border-amber-200 bg-[#FFFBEA] text-slate-600"
+      }`}
+    >
       <input
         type="checkbox"
         checked={isPresent}

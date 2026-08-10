@@ -1,9 +1,10 @@
-# FRIEDD SNAKE — Stock Evaluator
+# BPC Stock Evaluator
 
 Phase 1: scaffold, auth, and the monthly access-code gate. Phase 2: the
-FRIEDD SNAKE evaluation tool itself. Built for ~150 Invest With Bjorn
-students. This README is written for the owner, not a developer — follow it
-top to bottom the first time you set this up.
+FRIEDD SNAKE evaluation tool itself (the app's name is BPC Stock Evaluator;
+FRIEDD SNAKE is the name of the scoring framework it implements). Built for
+~150 Invest With Bjorn students. This README is written for the owner, not a
+developer — follow it top to bottom the first time you set this up.
 
 ## 1. Create the Supabase project
 

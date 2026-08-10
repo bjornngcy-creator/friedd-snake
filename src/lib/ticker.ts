@@ -76,6 +76,22 @@ export async function getTickerInfo(rawTicker: string): Promise<TickerLookupResu
       ),
     ]);
 
+    // Finnhub serves some unknown/invalid symbols as a 403 ("access denied")
+    // rather than a clean 404 or the empty-body 200 handled below — without
+    // this check that 403 fell into the generic HTTP-error branch and
+    // reported "service down" to a student who just typo'd a ticker. Treat
+    // it the same as the empty-body "not found" case: fall back to a stale
+    // cache entry if we have one, otherwise it's a not-found, not an outage.
+    if (quoteRes.status === 403 || profileRes.status === 403) {
+      if (cachedIsUsable) {
+        return {
+          ok: true,
+          data: { ticker, companyName: cached!.company_name!, price: Number(cached!.price) },
+        };
+      }
+      return { ok: false, error: "Ticker not found — check the symbol." };
+    }
+
     if (!quoteRes.ok || !profileRes.ok) {
       throw new Error(`Finnhub HTTP ${quoteRes.status}/${profileRes.status}`);
     }

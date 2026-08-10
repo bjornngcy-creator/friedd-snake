@@ -48,12 +48,14 @@ export async function getLockoutStatus(
 
 /**
  * Records a failed access-code attempt. On the 5th consecutive failure,
- * locks the user out for one hour.
+ * locks the user out for one hour. Returns the resulting lockout status so
+ * the caller can announce the lockout immediately on the attempt that
+ * triggered it, rather than the user only finding out on their next try.
  */
 export async function recordFailedAttempt(
   admin: SupabaseClient,
   userId: string
-): Promise<void> {
+): Promise<LockoutStatus> {
   const { data } = await admin
     .from("access_code_attempts")
     .select("failed_count")
@@ -62,18 +64,23 @@ export async function recordFailedAttempt(
 
   const nextCount = (data?.failed_count ?? 0) + 1;
   const now = new Date();
-  const lockedUntil =
-    nextCount >= MAX_FAILURES ? new Date(now.getTime() + LOCKOUT_MS).toISOString() : null;
+  const justLocked = nextCount >= MAX_FAILURES;
+  const lockedUntil = justLocked ? new Date(now.getTime() + LOCKOUT_MS) : null;
 
   await admin.from("access_code_attempts").upsert(
     {
       user_id: userId,
       failed_count: nextCount,
-      locked_until: lockedUntil,
+      locked_until: lockedUntil ? lockedUntil.toISOString() : null,
       updated_at: now.toISOString(),
     },
     { onConflict: "user_id" }
   );
+
+  if (justLocked) {
+    return { locked: true, remainingMinutes: Math.ceil(LOCKOUT_MS / 60000) };
+  }
+  return { locked: false };
 }
 
 /** Resets the failure streak on a successful access-code check. */

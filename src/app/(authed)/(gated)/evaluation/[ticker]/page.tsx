@@ -105,6 +105,7 @@ export default async function EvaluationPage({
         sharePrice: evaluation.share_price != null ? Number(evaluation.share_price) : null,
         inputs: (evaluation.inputs ?? {}) as EvaluationInputs,
         createdAt: evaluation.created_at,
+        status: (evaluation.status as "draft" | "complete") ?? "draft",
       }}
       framework={framework.definition}
     />

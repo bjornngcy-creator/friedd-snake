@@ -45,10 +45,34 @@ export type ScoringConfig = {
   pass_threshold: number;
 };
 
+/**
+ * Pure presentation metadata: how the form should visually group sections.
+ * Never consulted by computeScore/sanitizeInputs — scoring always iterates
+ * `definition.sections` directly, so grouping can change without touching
+ * how any evaluation is scored.
+ */
+export type FrameworkDisplayGroup = {
+  key: string;
+  title: string;
+  subtitle?: string | null;
+  /** Section keys (from `definition.sections`) that belong to this group, in display order. */
+  section_keys: string[];
+  /** true = render the group's sections as one flat criteria list with no per-section subheading. */
+  merge_sections: boolean;
+  /** Optional link-out copy shown in the group header (e.g. an Equity Scope prompt). */
+  equity_scope_note?: string | null;
+};
+
+export type FrameworkDisplay = {
+  groups: FrameworkDisplayGroup[];
+};
+
 export type FrameworkDefinition = {
   equity_scope_url: string;
   scoring: ScoringConfig;
   sections: Section[];
+  /** Optional — older/ungrouped framework versions won't have this. */
+  display?: FrameworkDisplay;
 };
 
 /** Raw per-criterion answers, keyed by criterion key. Scale criteria store a

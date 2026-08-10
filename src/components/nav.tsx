@@ -1,12 +1,16 @@
+import Link from "next/link";
 import { signOut } from "@/lib/actions/auth";
 
 export function Nav({ email }: { email: string | null | undefined }) {
   return (
     <header className="border-b border-slate-200 bg-white">
       <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4 sm:px-6">
-        <span className="text-sm font-semibold tracking-tight text-brand">
+        <Link
+          href="/dashboard"
+          className="text-sm font-semibold tracking-tight text-brand transition hover:text-brand-dark"
+        >
           BPC Stock Evaluator
-        </span>
+        </Link>
 
         <div className="flex items-center gap-4">
           {email && <span className="text-sm text-slate-500">{email}</span>}

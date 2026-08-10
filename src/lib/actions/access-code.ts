@@ -78,7 +78,15 @@ export async function verifyAccessCode(
   const matches = await bcrypt.compare(code, accessCode.code_hash);
 
   if (!matches) {
-    await recordFailedAttempt(admin, user.id);
+    const lockout = await recordFailedAttempt(admin, user.id);
+    if (lockout.locked) {
+      // This attempt was the 5th consecutive failure — announce the lockout
+      // now instead of letting the user see a generic wrong-code message
+      // and only discovering they're locked out on their next attempt.
+      return {
+        error: `Too many incorrect attempts. Try again in ${lockout.remainingMinutes} minute${lockout.remainingMinutes === 1 ? "" : "s"}.`,
+      };
+    }
     return { error: "That code isn't right for this month." };
   }
 

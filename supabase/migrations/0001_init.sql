@@ -16,9 +16,14 @@ create table if not exists public.profiles (
 
 alter table public.profiles enable row level security;
 
+drop policy if exists "Users can view own profile" on public.profiles;
+
 create policy "Users can view own profile"
   on public.profiles for select
   using (auth.uid() = id);
+
+-- No insert/update/delete policy on profiles: in particular, a user must not
+-- be able to update their own row, or they could set is_admin = true.
 
 -- Auto-create a profile row whenever a new auth user is created.
 create or replace function public.handle_new_user()
@@ -29,7 +34,8 @@ set search_path = public
 as $$
 begin
   insert into public.profiles (id, email)
-  values (new.id, new.email);
+  values (new.id, new.email)
+  on conflict (id) do nothing;
   return new;
 end;
 $$;
@@ -68,6 +74,8 @@ create table if not exists public.user_access (
 );
 
 alter table public.user_access enable row level security;
+
+drop policy if exists "Users can view own access" on public.user_access;
 
 create policy "Users can view own access"
   on public.user_access for select

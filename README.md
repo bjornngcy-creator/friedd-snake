@@ -59,6 +59,8 @@ is easier for you each month.
 
 **Option A — the Node script (recommended):**
 
+Run `npm install` once first (step 7) so the script has what it needs.
+
 ```bash
 node scripts/set-access-code.mjs YOUR-NEW-CODE
 ```
@@ -78,6 +80,10 @@ the SQL Editor, and run it.
 The dev seed code from the migration (`WELCOME2026`) only exists for local
 testing — rotate it with one of the options above before real students get
 access.
+
+Two things to know: the code is **case-sensitive**, so send students the
+exact characters; and a new month means a new lock — set the next month's
+code before the 1st (Singapore time) or everyone is locked out until you do.
 
 ## 7. Run it locally
 

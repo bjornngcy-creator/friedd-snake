@@ -98,3 +98,17 @@ values (
   crypt('WELCOME2026', gen_salt('bf'))
 )
 on conflict (month) do nothing;
+
+-- ---------------------------------------------------------------------------
+-- Grants. Some Supabase projects do not apply default table privileges to
+-- tables created via the SQL Editor, which leaves the API roles locked out
+-- (PostgREST error 42501). Explicit grants make the migration self-contained.
+-- RLS policies above still control which ROWS authenticated users can see.
+-- ---------------------------------------------------------------------------
+grant usage on schema public to anon, authenticated, service_role;
+grant select on public.profiles to authenticated;
+grant select on public.user_access to authenticated;
+grant all on public.profiles to service_role;
+grant all on public.user_access to service_role;
+grant all on public.access_codes to service_role;
+alter default privileges in schema public grant all on tables to service_role;

@@ -249,7 +249,13 @@ Vercel. No manual deploy step.
      every multi-column NumberField row in the valuation form (CAGR
      helper, Cash Flow & Growth, Balance Sheet, Debt & Leases, CAPM,
      Company Financials) — see the Phase 3.3-fix build session's report
-     for the per-row reasoning.
+     for the per-row reasoning. **Mobile residual closed same day (QA
+     finding):** a long helper link (e.g. "10Y Treasury (MarketWatch) ↗")
+     could still wrap to 2 lines in a narrow column (CAPM at 375px,
+     grid-cols-2, ~130px columns), exceeding the reserved line and lifting
+     that field's input — fixed by truncating helper links
+     (`inline-block max-w-full truncate` on the `<a>`) so they're always
+     one line; error/warning text still wraps freely.
   - **Not a bug, do not "fix":** the owner confirmed (2026-08-11) that the
     "FRIEDD SNAKE EVALUATOR" branding in the nav bar, browser tab title,
     and dashboard subtitle is intentional. A future session should not

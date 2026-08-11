@@ -1392,11 +1392,20 @@ function NumberField({
           ) : warning ? (
             <p className="text-amber-700 dark:text-amber-400">{warning}</p>
           ) : sourceUrl ? (
+            // Mobile residual (QA, 2026-08-11): a long link (e.g. "10Y
+            // Treasury (MarketWatch) ↗") could still wrap to 2 lines in a
+            // narrow column (CAPM at 375px, grid-cols-2, ~130px columns),
+            // exceeding the reserved min-h-4 and lifting that field's input
+            // above its siblings'. `truncate` alone does nothing on an
+            // inline element — needs `inline-block` (already had it) PLUS
+            // `max-w-full` so the box has something to truncate against;
+            // only the link is constrained, error/warning text below still
+            // wraps freely (that growth is the accepted transient case).
             <a
               href={sourceUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-block text-tertiary underline decoration-dotted hover:text-brand dark:hover:text-accent"
+              className="inline-block max-w-full truncate text-tertiary underline decoration-dotted hover:text-brand dark:hover:text-accent"
             >
               {sourceLabel} ↗
             </a>

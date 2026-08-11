@@ -1343,6 +1343,24 @@ function NumberField({
   // block anchors that whole unit to the BOTTOM of the (already-stretched)
   // cell instead, so every input in a row lines up regardless of how many
   // lines any sibling's label wraps to, at any width.
+  //
+  // Phase 3.3 fix (owner-reported residual): `mt-auto` bottom-anchors the
+  // whole "input + helper" block, so its height still has to match across
+  // siblings for the INPUTS themselves to line up — and it didn't whenever
+  // siblings had different helper content (one has a source link, another
+  // has none: e.g. Base FCF vs. the growth-rate fields; "Number of years"
+  // vs. the two FCF fields). A shorter (helper-less) block's input ends up
+  // lower than a taller (helper-present) block's input, since both blocks
+  // share the same bottom edge. Fix: the helper slot below the input always
+  // renders, reserving one line's worth of height (`min-h-4`, matching
+  // text-xs's 1rem line-height) even when it's empty — so every field's
+  // "input + helper" block is the SAME height in the default state,
+  // regardless of whether that field actually has a link/warning/error.
+  // Equal block height + shared bottom edge (mt-auto) => equal input
+  // position, solving both this and the original label-wrap case at once.
+  // A multi-line warning/error is still free to grow past that minimum —
+  // alignment during a transient warning is acceptable to break; the
+  // default (unwarned) state is what has to be perfect.
   return (
     <label className="flex h-full flex-col">
       <span className="text-xs font-medium text-secondary">{label}</span>
@@ -1368,20 +1386,22 @@ function NumberField({
               : "border-amber-200 bg-[#fffdf2] focus:border-brand focus:ring-brand dark:border-amber-800/50 dark:bg-amber-950/20 dark:focus:border-accent dark:focus:ring-accent"
           }`}
         />
-        {error ? (
-          <p className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p>
-        ) : warning ? (
-          <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">{warning}</p>
-        ) : sourceUrl ? (
-          <a
-            href={sourceUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-1 inline-block text-xs text-tertiary underline decoration-dotted hover:text-brand dark:hover:text-accent"
-          >
-            {sourceLabel} ↗
-          </a>
-        ) : null}
+        <div className="mt-1 min-h-4 text-xs">
+          {error ? (
+            <p className="text-red-600 dark:text-red-400">{error}</p>
+          ) : warning ? (
+            <p className="text-amber-700 dark:text-amber-400">{warning}</p>
+          ) : sourceUrl ? (
+            <a
+              href={sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block text-tertiary underline decoration-dotted hover:text-brand dark:hover:text-accent"
+            >
+              {sourceLabel} ↗
+            </a>
+          ) : null}
+        </div>
       </div>
     </label>
   );

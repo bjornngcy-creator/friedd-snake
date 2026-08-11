@@ -75,8 +75,9 @@ Vercel. No manual deploy step.
   a score record now that scoring+valuation are one page; 4: soft warnings
   added). Items 5 (MarketWatch link) and 6 (framework-version divergence,
   deferred to Phase 5) are still open.
-- **Phase 3.1 — valuation + evaluation-page rework: BUILT, pending owner
-  review and migration application.** Owner-approved 15-item brief covering:
+- **Phase 3.1 — valuation + evaluation-page rework: BUILT, QA'd (fix-first
+  round applied), pending owner review and migration application.**
+  Owner-approved 15-item brief covering:
   merged evaluation+valuation into one page per ticker (old
   `/evaluation/[ticker]/valuation` route now redirects there); valuation
   gate fully relaxed (reachable on a zero-answer draft or a FAIL, no
@@ -111,7 +112,12 @@ Vercel. No manual deploy step.
     Guarded the same way as 0004/0005: checks the current `display.groups`
     really is the pre-3.1 shape before overwriting, so a hand-edited or
     already-different `display` block makes it a no-op. Run
-    `npm run db-migrate` once real credentials are available.
+    `npm run db-migrate` once real credentials are available. **This is no
+    longer a deploy-ordering hazard** (see QA fix round below) —
+    `src/lib/display-groups.ts` tolerates both the pre-3.1 and current
+    `display.groups` shapes at runtime, so the migration can be applied
+    before or after this code ships without breaking the evaluation page
+    either way.
   - **`evaluations.valuation_summary` is now fully deprecated.** No code
     reads or writes it anymore — every valuation signal (the page, the
     dashboard badge) recomputes live from `valuation_inputs` +
@@ -127,6 +133,42 @@ Vercel. No manual deploy step.
     student-facing microcopy (negative-FCF note, 4 soft warnings, CAGR
     guideline) need an owner pass before this goes live — see the Phase 3.1
     build session's report for the full copy.
+  - **Adversarial QA (2026-08-11): fix-first round applied.** Golden tests,
+    engine math, migration 0008 guards, RLS, and pedagogy verified clean;
+    6 issues required fixes before this is deployable:
+    1. **CRITICAL — deploy-ordering deadlock, fixed.** The scoring page
+       crashed (`TypeError`) if the DB still held the pre-3.1 `display.groups`
+       shape, which production currently does — there was no migration
+       order that avoided breaking either the old or new code. Fixed by
+       `src/lib/display-groups.ts`, a runtime normalizer that tolerates
+       both shapes; regression-checked in the new
+       `npm run verify-display-groups`.
+    2. **HIGH — dashboard badge staleness, fixed.** The badge only used
+       each evaluation's stored `share_price` (last refreshed on that
+       ticker's own page visit), so it couldn't reflect a market move with
+       no student action, contradicting the owner's explicit requirement.
+       The dashboard now refreshes every distinct ticker via `getTickerInfo`
+       (concurrency-capped, `ticker_cache`'s 24h TTL still bounds Finnhub
+       calls) and writes the fresh price back.
+    3. **MEDIUM — mobile tooltip first-tap dead, fixed.** Switched
+       `InfoTooltip` (valuation summary + model cards) from
+       mouseenter/click to pointer events (`pointerType === "mouse"` gates
+       hover-open) plus a document-level outside-pointerdown listener to
+       close it, replacing the unreliable `onBlur`.
+    4. **MEDIUM — dark-mode auth pages, fixed.** Login, signup, and the
+       access-code form had hardcoded `text-slate-700`/`text-brand` classes
+       with no dark counterpart (near-invisible on a dark card); swapped
+       for the app's semantic tokens. Admin page intentionally left as-is.
+    5. **LOW — negative entry price, fixed.** A negative/zero fundamental
+       (e.g. BVPS -10) rendered a nonsense negative "entry price"
+       (`multipleModelResult` in `src/lib/valuation.ts`); now nulls the
+       price (dash in the UI) the same way it already nulled the signal.
+    6. **LOW — lingering legacy-debt note, fixed.** The "migrated from your
+       old total" note now clears as soon as the student edits any of the
+       4 debt/lease fields, instead of persisting until the next reload.
+    Negative-FCF behavior and the badge's sort order were explicitly out of
+    scope for this round (both stand as built). Fix commit:
+    see git log — committed locally, not pushed.
 - **Phase 4** — Portfolio plan. Not started.
 - **Phase 5** — Admin panel: framework editor (for `framework_versions`) + access-code
   rotation UI (replacing the current CLI/SQL-only flow). Not started.

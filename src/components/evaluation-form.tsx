@@ -14,6 +14,7 @@ import {
   type ScoreResult,
   type SectionScore,
 } from "@/lib/scoring";
+import { resolveDisplayGroups } from "@/lib/display-groups";
 import {
   markEvaluationComplete,
   reopenEvaluation,
@@ -32,16 +33,18 @@ type EvaluationData = {
 
 const AUTOSAVE_DELAY_MS = 800;
 
-/** Older/ungrouped framework versions won't have `display.groups` — fall
- * back to one ungrouped table per section so the form still renders. */
+/**
+ * Fix 1 (Phase 3.1 QA): this used to read `framework.display.groups`
+ * directly and assume every group already had the current `tables` shape.
+ * That's fine once migration 0008 has run against the DB the app is
+ * pointed at, but code and migration deploy independently — there's no
+ * ordering that avoids a window where they disagree. `resolveDisplayGroups`
+ * (src/lib/display-groups.ts) tolerates both the pre-3.1 (0005) shape and
+ * the current (0008) shape at runtime, so this page renders correctly no
+ * matter which one the database currently holds.
+ */
 function resolveGroups(framework: FrameworkDefinition): FrameworkDisplayGroup[] {
-  if (framework.display?.groups?.length) return framework.display.groups;
-  return framework.sections.map((section) => ({
-    key: section.key,
-    title: section.title,
-    subtitle: section.subtitle,
-    tables: [{ key: section.key, title: null, section_keys: [section.key], merge_sections: false }],
-  }));
+  return resolveDisplayGroups(framework);
 }
 
 export function EvaluationForm({

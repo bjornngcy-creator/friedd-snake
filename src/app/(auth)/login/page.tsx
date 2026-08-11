@@ -12,13 +12,13 @@ export default function LoginPage() {
   return (
     <div>
       <h1 className="font-serif text-2xl text-foreground">Log in</h1>
-      <p className="mt-1 text-sm text-slate-500">
+      <p className="mt-1 text-sm text-secondary">
         Welcome back to your stock evaluator.
       </p>
 
       <form action={formAction} className="mt-6 space-y-4">
         <div>
-          <label htmlFor="email" className="block text-sm font-medium text-slate-700">
+          <label htmlFor="email" className="block text-sm font-medium text-foreground">
             Email
           </label>
           <input
@@ -27,12 +27,12 @@ export default function LoginPage() {
             type="email"
             required
             autoComplete="email"
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+            className="mt-1 w-full rounded-md border border-subtle bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
           />
         </div>
 
         <div>
-          <label htmlFor="password" className="block text-sm font-medium text-slate-700">
+          <label htmlFor="password" className="block text-sm font-medium text-foreground">
             Password
           </label>
           <input
@@ -41,12 +41,12 @@ export default function LoginPage() {
             type="password"
             required
             autoComplete="current-password"
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+            className="mt-1 w-full rounded-md border border-subtle bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
           />
         </div>
 
         {state.error && (
-          <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+          <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300">
             {state.error}
           </p>
         )}
@@ -60,9 +60,9 @@ export default function LoginPage() {
         </button>
       </form>
 
-      <p className="mt-6 text-center text-sm text-slate-500">
+      <p className="mt-6 text-center text-sm text-secondary">
         No account yet?{" "}
-        <Link href="/signup" className="font-medium text-brand hover:underline">
+        <Link href="/signup" className="font-medium text-brand hover:underline dark:text-accent">
           Sign up
         </Link>
       </p>

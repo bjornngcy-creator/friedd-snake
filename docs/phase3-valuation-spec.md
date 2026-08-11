@@ -68,12 +68,25 @@
 > 12. **§5.1's `valuation_summary` column is deprecated.** Nothing reads or
 >    writes it anymore (dropping the column is a deferred cleanup). Every
 >    consumer — the valuation section, and now the dashboard too —
->    recomputes live from `valuation_inputs` + the evaluation's cached
->    `share_price`. The dashboard's Valuation column (§4) is now a live
->    "UV x/y" badge (count of models signaling Undervalued out of models
->    with enough inputs to signal at all — DCF + the 4 entry models, PEG
->    excluded since it's informational-only), not a stored margin-of-safety
->    percentage.
+>    recomputes live from `valuation_inputs` + a share price. The
+>    dashboard's Valuation column (§4) is now a live "UV x/y" badge (count
+>    of models signaling Undervalued out of models with enough inputs to
+>    signal at all — DCF + the 4 entry models, PEG excluded since it's
+>    informational-only), not a stored margin-of-safety percentage.
+>    **QA fix (2026-08-11):** the badge originally read only the
+>    evaluation's stored `share_price` (last refreshed whenever that
+>    ticker's page was visited), which meant it could go stale between
+>    visits — failing the owner's actual requirement that a market move
+>    flip a badge with no student action. The dashboard now dedupes tickers
+>    across the signed-in student's rows and refreshes each via the same
+>    `getTickerInfo` the evaluation page uses (concurrency-capped at 5),
+>    using the fresh price for the badge and writing it back to
+>    `evaluations.share_price` (not `updated_at`, so a background refresh
+>    never reorders the "recently updated" sort). `ticker_cache`'s existing
+>    24h TTL still caps this at ~1 Finnhub call per ticker per day — the
+>    dashboard is just now one more thing that can trigger that call,
+>    not an extra multiplier on it. A per-ticker Finnhub failure falls back
+>    to the stored price for that row only; it never blocks the dashboard.
 > 13. **SNAKE section split + renamed** (scoring page, not this valuation
 >    page, but noted here for completeness): Risks and Economic Moats now
 >    render as two separately-boxed tables under a "Qualitative Analysis"
@@ -81,8 +94,22 @@
 >    "Quantitative Analysis" (small "F.R.I.E.D.D" sub-label). Scoring
 >    criterion keys and math are untouched — display metadata only, via
 >    `supabase/migrations/0008_generic_section_titles.sql`.
+>    **QA fix (2026-08-11):** the scoring page's rendering
+>    (`src/lib/display-groups.ts`) now tolerates BOTH the pre-3.1 (0005)
+>    shape and the current (0008) shape of `framework_versions.definition.display`
+>    at runtime. Migration 0008 and this code deploy independently (the
+>    migration needs manual DB credentials this build session doesn't
+>    have), so there is no deploy order that's guaranteed safe otherwise —
+>    whichever shape the database currently holds, the evaluation page
+>    renders correctly, just with pre-3.1 section titles until 0008 is
+>    actually applied. See `scripts/verify-display-groups.mjs`.
 > 14. **App-wide dark mode.** Not a valuation-specific change, noted for
 >    completeness: a light/dark toggle in the header, persisted, no-flash.
+>    **QA fix (2026-08-11):** login, signup, and the access-code form had
+>    unreadable text/links in dark mode (hardcoded `text-slate-700`/
+>    `text-brand` classes with no dark counterpart); swapped for the
+>    semantic tokens the rest of the app already uses. Admin page
+>    unchanged (explicitly out of scope for this fix).
 >
 > Everything from here down is the original Phase 3 spec text.
 

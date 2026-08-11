@@ -11,7 +11,7 @@ export function AccessCodeForm() {
   return (
     <form action={formAction} className="mt-6 space-y-4">
       <div>
-        <label htmlFor="code" className="block text-sm font-medium text-slate-700">
+        <label htmlFor="code" className="block text-sm font-medium text-foreground">
           Access code
         </label>
         <input
@@ -21,12 +21,12 @@ export function AccessCodeForm() {
           required
           autoComplete="off"
           autoFocus
-          className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm tracking-wide focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+          className="mt-1 w-full rounded-md border border-subtle bg-surface px-3 py-2 text-sm tracking-wide text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
         />
       </div>
 
       {state.error && (
-        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300">
           {state.error}
         </p>
       )}

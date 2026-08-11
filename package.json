@@ -10,7 +10,8 @@
     "set-access-code": "node scripts/set-access-code.mjs",
     "db-migrate": "node scripts/db-migrate.mjs",
     "verify-scoring": "node scripts/verify-scoring.mjs",
-    "verify-valuation": "node scripts/verify-valuation.mjs"
+    "verify-valuation": "node scripts/verify-valuation.mjs",
+    "verify-display-groups": "node scripts/verify-display-groups.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",

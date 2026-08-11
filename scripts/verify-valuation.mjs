@@ -298,5 +298,28 @@ const partialYearlyModels = computeEntryModels(
 ok = assertEqual(partialYearlyModels.pb.avg5y, null, "Partial 5Y average (3 blanks) -> null, not a partial average") && ok;
 ok = assertEqual(partialYearlyModels.pb.signal, null, "Partial 5Y average -> PB signal null") && ok;
 
+// 4f. Fix 5 (Phase 3.1 QA): a negative/zero fundamental (e.g. BVPS -10) must
+// not render a negative "entry price" like "$-20.00" — the signal was
+// already null here before the fix, but the price wasn't.
+const negativeBvpsModels = computeEntryModels(
+  googlEntryInputs,
+  { ...googlCompanyFinancials, book_value_per_share: -10 },
+  googlSharePrice,
+  googlDilutedShares,
+  DEFAULT_VALUATION_CONFIG
+);
+ok = assertEqual(negativeBvpsModels.pb.entryPrice, null, "Negative BVPS -> PB entry price null, not $-66.40") && ok;
+ok = assertEqual(negativeBvpsModels.pb.currentMultiple, null, "Negative BVPS -> PB current multiple null") && ok;
+ok = assertEqual(negativeBvpsModels.pb.signal, null, "Negative BVPS -> PB signal null") && ok;
+
+const negativeEpsModels = computeEntryModels(
+  googlEntryInputs,
+  { ...googlCompanyFinancials, eps: -5 },
+  googlSharePrice,
+  googlDilutedShares,
+  DEFAULT_VALUATION_CONFIG
+);
+ok = assertEqual(negativeEpsModels.pe.entryPrice, null, "Negative EPS -> PE entry price null, not a negative dollar figure") && ok;
+
 console.log(ok ? "\nAll assertions passed." : "\nSome assertions FAILED.");
 if (!ok) process.exit(1);

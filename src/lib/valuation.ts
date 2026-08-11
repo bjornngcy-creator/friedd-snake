@@ -389,7 +389,16 @@ function multipleModelResult(
     perShareFundamental != null && perShareFundamental > 0 && isNum(sharePrice) && sharePrice > 0
       ? sharePrice / perShareFundamental
       : null;
-  const rawEntryPrice = perShareFundamental != null && avg5y != null ? perShareFundamental * avg5y : null;
+  // Fix 5 (Phase 3.1 QA): a negative/zero fundamental (e.g. BVPS -10) used
+  // to still multiply through into a negative "entry price" like "$-20.00"
+  // — the signal was already correctly null (below), but the price wasn't.
+  // Gate this the same way `currentMultiple` already is: only a genuinely
+  // positive fundamental produces a price worth showing; anything else is
+  // "not yet computed" (a dash in the summary table), not a nonsense number.
+  const rawEntryPrice =
+    perShareFundamental != null && perShareFundamental > 0 && avg5y != null
+      ? perShareFundamental * avg5y
+      : null;
   const entryPrice = rawEntryPrice != null && Number.isFinite(rawEntryPrice) ? rawEntryPrice : null;
   return {
     avg5y,

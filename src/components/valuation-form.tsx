@@ -145,7 +145,21 @@ export function ValuationSection({
     setInputs((prev) => ({ ...prev, entry_models: { ...prev.entry_models, peg: { peg_ratio: value } } }));
   }
 
+  // Fix 6 (Phase 3.1 QA): the legacy-debt migration note (rendered below)
+  // should disappear the moment the student touches any of the 4 debt/lease
+  // fields, not linger until the next full page reload — the autosave
+  // already drops the legacy key server-side on first save, so this is
+  // purely about not showing a stale instruction once it's been acted on.
+  const [debtFieldsTouched, setDebtFieldsTouched] = useState(false);
+  const DEBT_FIELD_KEYS: (keyof DcfInputs)[] = [
+    "short_term_debt",
+    "long_term_debt",
+    "short_term_lease",
+    "long_term_lease",
+  ];
+
   function setDcfField(key: keyof DcfInputs, value: number | undefined) {
+    if (DEBT_FIELD_KEYS.includes(key)) setDebtFieldsTouched(true);
     setInputs((prev) => ({ ...prev, dcf: { ...prev.dcf, [key]: value } }));
   }
 
@@ -188,7 +202,7 @@ export function ValuationSection({
             setCagrField={setCagrField}
             setDcfField={setDcfField}
             cagr={cagr}
-            legacyDebtTotal={legacyDebtTotal ?? null}
+            legacyDebtTotal={debtFieldsTouched ? null : (legacyDebtTotal ?? null)}
           />
 
           <EntryModelsGroup
@@ -985,18 +999,51 @@ function InlineNote({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Phase 3.1 item 4 — small info icon; hover reveals the tip on desktop (title attr + CSS hover), tap toggles it on mobile (onClick). */
+/**
+ * Phase 3.1 item 4 — small info icon; hover reveals the tip on desktop, tap
+ * toggles it on mobile.
+ *
+ * Fix 3 (Phase 3.1 QA, mobile first-tap dead): a tap fires a synthetic
+ * `mouseenter` immediately before `click` in the same batch — the old
+ * onMouseEnter/onClick combo set open=true then flipped it back to false on
+ * the very first tap, so mobile students had to tap twice. Pointer events
+ * fix this because they carry `pointerType`: hover-open only responds to a
+ * real mouse (`pointerType === "mouse"`), so on touch the ONLY thing that
+ * opens the tooltip is the click. Closing on outside tap replaces the old
+ * onBlur (unreliable on iOS Safari, where a tapped <button> doesn't reliably
+ * take focus) with a document-level pointerdown listener, attached only
+ * while open and removed on close/unmount.
+ */
 function InfoTooltip({ text, label }: { text: string; label: string }) {
   const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    function handleOutsidePointerDown(e: PointerEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handleOutsidePointerDown);
+    return () => document.removeEventListener("pointerdown", handleOutsidePointerDown);
+  }, [open]);
+
   return (
-    <span className="relative inline-flex">
+    <span ref={containerRef} className="relative inline-flex">
       <button
         type="button"
         aria-label={label}
+        aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        onMouseEnter={() => setOpen(true)}
-        onMouseLeave={() => setOpen(false)}
-        onBlur={() => setOpen(false)}
+        onPointerEnter={(e) => {
+          if (e.pointerType === "mouse") setOpen(true);
+        }}
+        onPointerLeave={(e) => {
+          if (e.pointerType === "mouse") setOpen(false);
+        }}
         className="flex h-4 w-4 items-center justify-center rounded-full border border-tertiary text-[10px] font-semibold leading-none text-tertiary transition hover:border-brand hover:text-brand dark:hover:border-accent dark:hover:text-accent"
       >
         i

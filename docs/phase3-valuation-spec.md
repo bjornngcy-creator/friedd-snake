@@ -1,5 +1,91 @@
 # Equity Compass — Phase 3 Build Spec: Valuation Module
 
+> **Phase 3.1 addendum (2026-08-11).** Phase 3 shipped and was QA'd (see
+> CLAUDE.md Phase status), then the owner requested a rework. This spec's
+> DCF math is UNCHANGED and still the source of truth for §1.4/§6's numbers.
+> Everything below this note documents what Phase 3.1 changed; the rest of
+> the file is the original Phase 3 spec, left in place except where a
+> Phase 3.1 note says otherwise.
+>
+> 1. **Merged page, no step-through nav.** Valuation is no longer a separate
+>    route (`/evaluations/[id]/valuation` from §4 below doesn't exist —
+>    valuation is a section on the same page as scoring, at
+>    `/evaluation/[ticker]`). The old route now redirects there.
+> 2. **Gate relaxed further than §4 originally described.** Valuation is
+>    reachable on a zero-answer draft and on a completed FAIL — there is no
+>    "a score must exist" condition at all anymore, not even the soft one
+>    §4 described.
+> 3. **Negative/zero FCF never disables any input.** §3 below still
+>    describes the right *message* and *trigger condition* (base FCF ≤ 0),
+>    but the "greyed/locked" input treatment it also describes was removed —
+>    every DCF input stays fully editable regardless of FCF's sign. Only the
+>    DCF *output area* swaps to the teaching note.
+> 4. **No overall/blended verdict, anywhere, ever — including §3's "Overall
+>    valuation verdict" majority-vote/MoS-band proposal below.** The actual
+>    Phase 3 build already locked this down (see CLAUDE.md: "No overall
+>    verdict. Show per-model signals only") before Phase 3.1 started; §3's
+>    verdict-synthesis logic was written but never built. Phase 3.1 makes
+>    that final and also removes Margin of Safety from every display
+>    surface — it's still computed internally (it's how the DCF's own
+>    Undervalued/Fair/Overvalued signal is banded), it just never renders as
+>    a number or a percentage anywhere in the UI.
+> 5. **Debt input is 4 fields, not 1.** §2.1's "Total Debt + Leases ($M)"
+>    row is now short-term debt, long-term debt, short-term lease, and
+>    long-term lease — auto-summed, blank = $0. Old evaluations with the
+>    single total are migrated on read (the old value lands in long-term
+>    debt; the split doesn't change the sum, so §6's GOOGL net-debt number
+>    is unaffected).
+> 6. **P/B, P/E and P/OCF became "5Y average multiple" models.** Instead of
+>    one "avg 5Y ratio" input compared against share price the way §1.3
+>    describes, each of these three now takes 5 yearly ratio inputs (their
+>    average is the "5Y average"), compared against a CURRENT multiple the
+>    app derives (price ÷ the student's own per-share fundamental — EPS,
+>    book value/share, or OCF/share). Signal = current multiple vs 5Y
+>    average, the same shape §1.3 already used for P/OCF alone — now all
+>    three multiple models share it. Dividend Yield is unchanged (still
+>    entry-price vs share price, per §1.3).
+> 7. **P/OCF's `ocf_per_share` input is gone.** Students enter total
+>    operating cash flow ($M) instead; OCF/share is derived by dividing by
+>    diluted shares outstanding — the same shares number already collected
+>    for the DCF, not asked twice. (This directly resolves Phase 3 flagged
+>    item 1 in CLAUDE.md: OCF-per-share wasn't published on
+>    stockanalysis.com and students got stuck entering it. Total OCF is on
+>    the Cash Flow Statement page they already use for FCF.)
+> 8. **CAGR helper input order flipped**: latest year/TTM FCF is entered
+>    first, then first-year FCF (§1.2's formula is unchanged — this is a UI
+>    ordering change only). A "count the gaps, not the years" guideline now
+>    sits under the years field.
+> 9. **New non-blocking soft warnings** (same inline style as the
+>    negative-FCF note): book value/share ≤ 0, negative EPS, CAGR years
+>    outside 1-20, and a growth-decay hint when Yrs 6-10 growth ≥ Yrs 1-5
+>    growth.
+> 10. **§4's Valuation Summary becomes ONE fixed-order table**: DCF, P/B,
+>    Dividend, P/E, P/OCF, always in that order. Each model name carries a
+>    small info-icon tooltip explaining when that model is the right one to
+>    trust. A model without enough inputs yet renders as a dash row — never
+>    hidden, order never changes. No row gets special/headline treatment.
+> 11. **Projected FCF table (§2.2) is collapsible, collapsed by default.**
+> 12. **§5.1's `valuation_summary` column is deprecated.** Nothing reads or
+>    writes it anymore (dropping the column is a deferred cleanup). Every
+>    consumer — the valuation section, and now the dashboard too —
+>    recomputes live from `valuation_inputs` + the evaluation's cached
+>    `share_price`. The dashboard's Valuation column (§4) is now a live
+>    "UV x/y" badge (count of models signaling Undervalued out of models
+>    with enough inputs to signal at all — DCF + the 4 entry models, PEG
+>    excluded since it's informational-only), not a stored margin-of-safety
+>    percentage.
+> 13. **SNAKE section split + renamed** (scoring page, not this valuation
+>    page, but noted here for completeness): Risks and Economic Moats now
+>    render as two separately-boxed tables under a "Qualitative Analysis"
+>    heading (small "SNAKE" sub-label); F.R.I.E.D.D + Others render under
+>    "Quantitative Analysis" (small "F.R.I.E.D.D" sub-label). Scoring
+>    criterion keys and math are untouched — display metadata only, via
+>    `supabase/migrations/0008_generic_section_titles.sql`.
+> 14. **App-wide dark mode.** Not a valuation-specific change, noted for
+>    completeness: a light/dark toggle in the header, persisted, no-flash.
+>
+> Everything from here down is the original Phase 3 spec text.
+
 Source of truth for the sheet's mechanics: `friedd-snake-framework-spec.md` (same scratchpad folder). This spec extends that document into a buildable Phase 3 feature — the valuation page that hangs off a FRIEDD SNAKE evaluation (Phase 2, in progress).
 
 Owner-locked requirements (from Bjorn, restated for traceability):

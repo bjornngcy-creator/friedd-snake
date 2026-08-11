@@ -47,15 +47,32 @@ Vercel. No manual deploy step.
   - **Dashboard valuation column** = a sortable margin-of-safety percentage (replaces
     the old `—` placeholder).
 
-  **QA sweep:** an adversarial QA sweep of Phase 3 (edge inputs, Gordon Growth
-  guard, mobile, RLS) was launched 2026-08-11. Its fixes, if any, land as
-  "Phase 3 QA fixes" commits — treat its findings as pending unless such a commit
-  exists in `git log`.
+  **QA sweep: COMPLETE.** Adversarial QA sweep of Phase 3 (edge inputs, Gordon
+  Growth guard, mobile, RLS). Fixes landed in commit `843a2b8` ("Phase 3 QA
+  fixes: NaN/Infinity guards, empty-vs-negative FCF copy, source links").
+  Verdict: production-safe.
+
+  **Phase 3 flagged items (owner decisions pending):**
+  1. OCF-per-share isn't published on stockanalysis.com — students will get
+     stuck entering it. Recommended fix: help text teaching the derivation
+     (share price ÷ current P/OCF).
+  2. Dashboard `valuation_summary.margin_of_safety` goes stale when
+     `share_price` refreshes — needs a recompute hook.
+  3. Valuation is reachable from a zero-answer draft; the spec said it should
+     only be visible once a score exists.
+  4. Spec §2.1 soft range warnings (BVPS ≤ 0, negative PE, years 1-20,
+     growth-decay hint) are unimplemented.
+  5. The MarketWatch 10Y Treasury link is unverifiable by agents (bot-walled)
+     — owner must eyeball it once.
+  6. **LATENT, for Phase 5:** pages render the newest *published* framework
+     version, but server actions use the evaluation's *pinned*
+     `framework_version` — these will silently diverge once framework v2 is
+     published. Must be resolved in Phase 5.
 
   **Owner checkpoint: IN PROGRESS.** Owner said "ok, some changes" but has not
   yet given the actual change list. **Next session: ask him for his Phase 3
-  feedback before building anything new** — do not start Phase 4 or guess at
-  what he wants changed.
+  feedback (including the flagged items above) before building anything
+  new** — do not start Phase 4 or guess at what he wants changed.
 - **Phase 4** — Portfolio plan. Not started.
 - **Phase 5** — Admin panel: framework editor (for `framework_versions`) + access-code
   rotation UI (replacing the current CLI/SQL-only flow). Not started.

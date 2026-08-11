@@ -1,4 +1,4 @@
-# BPC Stock Evaluator — Phase 3 Build Spec: Valuation Module
+# Equity Compass — Phase 3 Build Spec: Valuation Module
 
 Source of truth for the sheet's mechanics: `friedd-snake-framework-spec.md` (same scratchpad folder). This spec extends that document into a buildable Phase 3 feature — the valuation page that hangs off a FRIEDD SNAKE evaluation (Phase 2, in progress).
 
@@ -84,7 +84,16 @@ for year in 1..10: discount_factor[year] = discount_factor[year-1] / (1 + discou
 pv_fcf[year] = fcf[year] * discount_factor[year]                  // year 0..10, year 0 shown but NOT summed
 
 terminal_value = fcf[10] * (1 + terminal_growth) / (discount_rate - terminal_growth)
-pv_terminal_value = terminal_value * discount_factor[10]
+// CORRECTED — the terminal value's discount factor is ONE period further out
+// than Year 10's own factor, not a reuse of discount_factor[10]. The sheet's
+// literal formula is F92 = F91/(1+$D$72) (framework-spec.md §2d row 92), i.e.
+// the terminal value (valued as of the end of Year 10) still needs one more
+// division by (1+discount_rate) to land in present-day terms. Using
+// discount_factor[10] as-is understates every downstream number and misses
+// the GOOGL sum_pv checksum below by ~149,081 — verified numerically during
+// the Phase 3 build.
+terminal_discount_factor = discount_factor[10] / (1 + discount_rate)
+pv_terminal_value = terminal_value * terminal_discount_factor
 
 sum_pv = sum(pv_fcf[1..10]) + pv_terminal_value                   // excludes pv_fcf[0] — see note below
 

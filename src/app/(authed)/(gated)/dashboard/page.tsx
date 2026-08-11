@@ -12,20 +12,29 @@ export default async function DashboardPage() {
   const [{ data: evaluations }, framework] = await Promise.all([
     supabase
       .from("evaluations")
-      .select("id, ticker, company_name, final_score, verdict, status, updated_at")
+      .select("id, ticker, company_name, final_score, verdict, status, updated_at, valuation_summary")
       .order("updated_at", { ascending: false }),
     getPublishedFramework(supabase),
   ]);
 
-  const rows: EvaluationRow[] = (evaluations ?? []).map((row) => ({
-    id: row.id,
-    ticker: row.ticker,
-    companyName: row.company_name,
-    finalScore: row.final_score != null ? Number(row.final_score) : null,
-    verdict: (row.verdict as "PASS" | "FAIL" | null) ?? null,
-    status: row.status,
-    updatedAt: row.updated_at,
-  }));
+  const rows: EvaluationRow[] = (evaluations ?? []).map((row) => {
+    const summary = row.valuation_summary as
+      | { dcf_available?: boolean; margin_of_safety?: number | null }
+      | null;
+    const marginOfSafety =
+      summary?.dcf_available && summary.margin_of_safety != null ? Number(summary.margin_of_safety) : null;
+
+    return {
+      id: row.id,
+      ticker: row.ticker,
+      companyName: row.company_name,
+      finalScore: row.final_score != null ? Number(row.final_score) : null,
+      verdict: (row.verdict as "PASS" | "FAIL" | null) ?? null,
+      status: row.status,
+      updatedAt: row.updated_at,
+      marginOfSafety,
+    };
+  });
 
   const companiesEvaluated = rows.length;
   const passedCount = rows.filter((r) => r.verdict === "PASS").length;

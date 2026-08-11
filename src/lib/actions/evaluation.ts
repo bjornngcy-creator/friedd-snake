@@ -1,16 +1,12 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
-import { hasCurrentMonthAccess, isAdmin } from "@/lib/access";
 import {
   computeScore,
   sanitizeInputs,
   type EvaluationInputs,
   type FrameworkDefinition,
 } from "@/lib/scoring";
-
-const ACCESS_EXPIRED_ERROR =
-  "Your monthly access has expired. Enter this month's code to continue.";
+import { requireEvaluationAccess } from "@/lib/require-evaluation-access";
 
 export type SaveEvaluationResult =
   | {
@@ -27,31 +23,6 @@ export type MarkCompleteResult =
   | { ok: false; error: string };
 
 export type ReopenResult = { ok: true; status: "draft" } | { ok: false; error: string };
-
-/**
- * Authenticates the caller and enforces the same monthly access gate the
- * (gated) layout and the evaluation page apply — admins bypass it. Every
- * mutating evaluation action needs this, not just the page render: without
- * it, a student whose month has lapsed (or who is mid brute-force lockout)
- * could keep autosaving/completing/deleting evaluations through the server
- * actions directly, since actions don't run through the page's redirect.
- */
-async function requireEvaluationAccess() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return { ok: false as const, error: "Not authenticated." };
-  }
-
-  if (!(await isAdmin(supabase, user.id)) && !(await hasCurrentMonthAccess(supabase, user.id))) {
-    return { ok: false as const, error: ACCESS_EXPIRED_ERROR };
-  }
-
-  return { ok: true as const, supabase, userId: user.id };
-}
 
 /**
  * Autosave endpoint for the evaluation form. Recomputes the score

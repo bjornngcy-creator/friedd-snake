@@ -169,6 +169,48 @@ Open [http://localhost:3000](http://localhost:3000). New students go
   verdict, and full DCF). The dashboard's "Valuation" column is a
   placeholder (`—`) until that's built.
 
+## What's in Phase 3
+
+- `/evaluation/[ticker]/valuation` — the valuation module, reached from a
+  "Valuation →" button on the scoring page (always visible, not gated on
+  PASS/complete — a FAIL company can still be valued for reference).
+  Requires the evaluation row to already exist; doesn't create one.
+- **No overall/blended verdict anywhere.** Every model — PB, Dividend
+  Yield, PE, P/OCF, DCF — shows its own independent Undervalued/Fair
+  Value/Overvalued signal. Nothing votes across them or averages them. PEG
+  is informational only (shown small and separate, never a peer of the
+  five real models).
+- **CAGR helper** (first-year FCF, last-year FCF, years → CAGR%) sits
+  directly above the DCF growth-rate inputs — purely to seed judgment, not
+  wired into any downstream formula.
+- **DCF** — CAPM discount rate, 10-year two-phase FCF projection + Gordon
+  Growth terminal value, net-debt adjustment, margin of safety vs. share
+  price. A base FCF ≤ 0 disables the panel (inputs stay visible but
+  greyed, FCF itself keeps autosaving) with an explanatory banner, and it
+  live re-enables the moment FCF is edited back above 0 — no reload. DCF's
+  own signal comes from margin-of-safety bands (±15% by default, tunable
+  via `framework_versions.definition.valuation_config`).
+- **P/OCF model** (new alongside PB/Dividend/PE) — current P/OCF vs. a
+  student-entered 5-year average, same three-way signal shape as PEG.
+- All valuation inputs autosave the same way scoring inputs do (~800ms
+  after you stop typing). Only share price/company name are auto-fetched
+  (unchanged from Phase 2) — every other number is student-sourced, with
+  the same stockanalysis.com nav-path hints as the sheet, plus MarketWatch
+  (10Y Treasury) and market-risk-premia.com for the two CAPM inputs
+  stockanalysis.com doesn't publish.
+- The valuation math (CAGR, all four entry-price models + PEG, the full
+  DCF chain) lives in one shared module, `src/lib/valuation.ts`, used by
+  both the live client-side recalc and the server-side autosave.
+  `npm run verify-valuation` reproduces the framework spec's worked GOOGL
+  DCF example (discount rate 6.5573%, intrinsic value/share $258.34,
+  margin of safety -27.08%, Overvalued), a synthetic negative-FCF case,
+  and the CAGR helper's own worked example.
+- **Dashboard "Valuation" column** is now live: the DCF margin-of-safety
+  percentage, colored (green positive / red negative), sortable by
+  clicking the column header (rows with no DCF — unavailable or valuation
+  never started — always sort to the bottom). Replaces the Phase 2
+  placeholder `—`.
+
 ## Notes for future development
 
 - Deployment target is Cloudflare Pages (not set up yet).

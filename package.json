@@ -9,7 +9,8 @@
     "lint": "eslint",
     "set-access-code": "node scripts/set-access-code.mjs",
     "db-migrate": "node scripts/db-migrate.mjs",
-    "verify-scoring": "node scripts/verify-scoring.mjs"
+    "verify-scoring": "node scripts/verify-scoring.mjs",
+    "verify-valuation": "node scripts/verify-valuation.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",

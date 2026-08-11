@@ -231,6 +231,14 @@ function EvaluationHeader({ evaluation, today }: { evaluation: EvaluationData; t
             <span>{today}</span>
           </div>
         </div>
+
+        {/* Always accessible — a FAIL company can still be valued for reference, so this doesn't wait for PASS or "complete". */}
+        <Link
+          href={`/evaluation/${encodeURIComponent(evaluation.ticker)}/valuation`}
+          className="inline-flex shrink-0 items-center justify-center rounded-md bg-brand px-4 py-2 text-sm font-medium text-accent transition hover:bg-brand-dark"
+        >
+          Valuation →
+        </Link>
       </div>
     </div>
   );

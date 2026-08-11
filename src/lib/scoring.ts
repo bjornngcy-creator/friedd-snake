@@ -67,12 +67,27 @@ export type FrameworkDisplay = {
   groups: FrameworkDisplayGroup[];
 };
 
+/**
+ * Phase 3 valuation assumptions a Phase 5 admin should be able to tune
+ * without a code deploy (docs/phase3-valuation-spec.md §5.2). Read by
+ * src/lib/valuation.ts via resolveValuationConfig, which falls back to
+ * DEFAULT_VALUATION_CONFIG for older framework versions that predate this
+ * field (added in supabase/migrations/0007_valuation_config.sql).
+ */
+export type FrameworkValuationConfig = {
+  dividend_yield_assumption: number;
+  terminal_growth_guidance: { min: number; max: number };
+  margin_of_safety_bands: { undervalued: number; overvalued: number };
+};
+
 export type FrameworkDefinition = {
   equity_scope_url: string;
   scoring: ScoringConfig;
   sections: Section[];
   /** Optional — older/ungrouped framework versions won't have this. */
   display?: FrameworkDisplay;
+  /** Optional — older framework versions (pre-Phase-3) won't have this. */
+  valuation_config?: FrameworkValuationConfig;
 };
 
 /** Raw per-criterion answers, keyed by criterion key. Scale criteria store a

@@ -199,7 +199,21 @@ export function computeCagr(inputs: CagrHelperInputs): CagrResult {
   if (fcf_first <= 0) {
     return { ok: false, error: "Can't compute CAGR — starting FCF must be positive." };
   }
+  // The ending value has to be positive too. A positive start and a negative
+  // end makes the ratio negative, and a negative number raised to a
+  // fractional power (1/years) is NaN — which is exactly how "CAGR: NaN%"
+  // used to reach the student. This is not a hypothetical: any company whose
+  // FCF flipped negative in the final year of the window lands here.
+  if (fcf_last <= 0) {
+    return {
+      ok: false,
+      error: "Can't compute CAGR — ending FCF must be positive too. A move from positive to negative FCF has no meaningful growth rate.",
+    };
+  }
   const cagr = Math.pow(fcf_last / fcf_first, 1 / years) - 1;
+  if (!Number.isFinite(cagr)) {
+    return { ok: false, error: "Can't compute CAGR from those numbers — check the values you entered." };
+  }
   return { ok: true, cagr };
 }
 
@@ -211,8 +225,16 @@ export function computeCagr(inputs: CagrHelperInputs): CagrResult {
 // comparison per spec §1.3; PEG uses its own ratio verdict.)
 // ---------------------------------------------------------------------------
 
-function priceDiffSignal(entryPrice: number, sharePrice: number): Signal {
+/**
+ * Null (no signal) rather than a made-up verdict when the share price isn't a
+ * usable positive number — dividing by 0 yields ±Infinity and 0/0 yields NaN,
+ * both of which used to fall through the comparisons below and paint a
+ * confident Undervalued/Fair Value badge built on nothing.
+ */
+function priceDiffSignal(entryPrice: number, sharePrice: number): Signal | null {
+  if (!Number.isFinite(entryPrice) || !isNum(sharePrice) || sharePrice <= 0) return null;
   const diffPct = (entryPrice - sharePrice) / sharePrice;
+  if (!Number.isFinite(diffPct)) return null;
   if (diffPct > 0) return "Undervalued";
   if (diffPct < 0) return "Overvalued";
   return "Fair Value";
@@ -220,14 +242,19 @@ function priceDiffSignal(entryPrice: number, sharePrice: number): Signal {
 
 export type EntryModelResult = { entryPrice: number | null; signal: Signal | null };
 
+/** Shared exit for every entry-price model: an entry price that overflowed to ±Infinity is not a price, so it's reported as "not computed" rather than rendered as "$Infinity". */
+function entryModelResult(entryPrice: number, sharePrice: number | null | undefined): EntryModelResult {
+  if (!Number.isFinite(entryPrice)) return { entryPrice: null, signal: null };
+  return { entryPrice, signal: priceDiffSignal(entryPrice, sharePrice as number) };
+}
+
 export function computePbModel(
   bookValuePerShare: number | null | undefined,
   avg5yPb: number | null | undefined,
   sharePrice: number | null | undefined
 ): EntryModelResult {
   if (!isNum(bookValuePerShare) || !isNum(avg5yPb)) return { entryPrice: null, signal: null };
-  const entryPrice = bookValuePerShare * avg5yPb;
-  return { entryPrice, signal: isNum(sharePrice) ? priceDiffSignal(entryPrice, sharePrice) : null };
+  return entryModelResult(bookValuePerShare * avg5yPb, sharePrice);
 }
 
 export function computeDividendModel(
@@ -236,8 +263,7 @@ export function computeDividendModel(
   dividendYieldAssumption: number
 ): EntryModelResult {
   if (!isNum(annualDividend) || !dividendYieldAssumption) return { entryPrice: null, signal: null };
-  const entryPrice = annualDividend / dividendYieldAssumption;
-  return { entryPrice, signal: isNum(sharePrice) ? priceDiffSignal(entryPrice, sharePrice) : null };
+  return entryModelResult(annualDividend / dividendYieldAssumption, sharePrice);
 }
 
 export function computePeModel(
@@ -246,8 +272,7 @@ export function computePeModel(
   sharePrice: number | null | undefined
 ): EntryModelResult {
   if (!isNum(eps) || !isNum(avg5yPe)) return { entryPrice: null, signal: null };
-  const entryPrice = eps * avg5yPe;
-  return { entryPrice, signal: isNum(sharePrice) ? priceDiffSignal(entryPrice, sharePrice) : null };
+  return entryModelResult(eps * avg5yPe, sharePrice);
 }
 
 /** P/OCF — the one model with a current-vs-5y-average comparison built in, per spec §1.3 (not diff-vs-share-price like the other three). */
@@ -257,7 +282,8 @@ export function computePocfModel(
   avg5yPocf: number | null | undefined
 ): EntryModelResult {
   if (!isNum(ocfPerShare) || !isNum(avg5yPocf)) return { entryPrice: null, signal: null };
-  const entryPrice = ocfPerShare * avg5yPocf;
+  const rawEntryPrice = ocfPerShare * avg5yPocf;
+  const entryPrice = Number.isFinite(rawEntryPrice) ? rawEntryPrice : null;
   let signal: Signal | null = null;
   if (isNum(currentPocf)) {
     if (currentPocf < avg5yPocf) signal = "Undervalued";
@@ -317,7 +343,15 @@ export type DcfYearRow = {
 
 export type DcfUnavailable = {
   available: false;
-  reason: "negative_fcf" | "missing_inputs" | "guardrail";
+  /**
+   * `missing_fcf` (base FCF simply hasn't been entered yet) is deliberately
+   * distinct from `negative_fcf` (a real, entered, non-positive number).
+   * Collapsing the two made a brand-new, untouched valuation page tell the
+   * student "DCF valuation isn't available for Microsoft Corp — a company
+   * with negative free cash flow…", a claim about the business that nobody
+   * had made and that was usually false.
+   */
+  reason: "missing_fcf" | "negative_fcf" | "missing_inputs" | "guardrail";
   message: string;
 };
 
@@ -341,6 +375,11 @@ export function isDcfEnabled(baseFcf: number | null | undefined): boolean {
   return isNum(baseFcf) && baseFcf > 0;
 }
 
+/** True only when base FCF has actually been entered AND is non-positive — i.e. the genuine "this company can't be DCF'd" case, as opposed to "nothing typed yet". */
+export function isDcfBlockedByNegativeFcf(baseFcf: number | null | undefined): boolean {
+  return isNum(baseFcf) && baseFcf <= 0;
+}
+
 export function computeDcf(
   inputs: DcfInputs,
   sharePrice: number | null | undefined,
@@ -358,6 +397,14 @@ export function computeDcf(
     market_risk_premium,
     beta,
   } = inputs;
+
+  if (!isNum(base_fcf)) {
+    return {
+      available: false,
+      reason: "missing_fcf",
+      message: "Enter the base free cash flow above to start the DCF.",
+    };
+  }
 
   if (!isDcfEnabled(base_fcf)) {
     return {
@@ -390,6 +437,19 @@ export function computeDcf(
   }
 
   const discountRate = beta * market_risk_premium + risk_free_rate;
+
+  // A discount rate of -100% makes every discount factor divide by zero, and
+  // anything below that alternates sign each year — neither produces a
+  // number worth showing. Caught here so the student gets a sentence instead
+  // of a table full of ∞.
+  if (!Number.isFinite(discountRate) || discountRate <= -1) {
+    return {
+      available: false,
+      reason: "guardrail",
+      message:
+        "Those CAPM inputs give a discount rate of -100% or lower, which the model can't work with. Check the risk-free rate, market risk premium and beta.",
+    };
+  }
 
   if (discountRate <= terminal_growth) {
     return {
@@ -436,6 +496,25 @@ export function computeDcf(
   const intrinsicValueTotal = sumPv - netDebt;
   const intrinsicValuePerShare = intrinsicValueTotal / diluted_shares;
   const marginOfSafety = (intrinsicValuePerShare - sharePrice) / sharePrice;
+
+  // Final overflow net. Extreme-but-typeable inputs (a 1e300 growth rate, a
+  // share count of 1e-320, debt at the float ceiling) can push these past
+  // what a double can hold, and NaN/Infinity must never render as a valuation
+  // or be written to valuation_summary — JSON.stringify turns both into
+  // `null`, which previously persisted the nonsense state
+  // { dcf_available: true, margin_of_safety: null, dcf_signal: "…" }.
+  if (
+    ![sumPv, terminalValue, intrinsicValueTotal, intrinsicValuePerShare, marginOfSafety].every(
+      Number.isFinite
+    )
+  ) {
+    return {
+      available: false,
+      reason: "guardrail",
+      message:
+        "Those inputs produce numbers too large for the model to work with. Check the growth rates, share count, cash and debt figures.",
+    };
+  }
 
   const bands = config.margin_of_safety_bands;
   let signal: Signal;

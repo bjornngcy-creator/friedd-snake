@@ -193,5 +193,62 @@ if (!cagrEdgeCase.ok) {
   console.log(`  ok: CAGR edge case error = "${cagrEdgeCase.error}"`);
 }
 
+// ---------------------------------------------------------------------------
+// Case 4: hostile-input guards (added by Phase 3 QA). Every case below was
+// reproducible in the live UI before these guards existed — the student saw
+// "CAGR: NaN%", "$NaN", "Infinity%", or a claim about the company's cash flow
+// that nobody had entered.
+// ---------------------------------------------------------------------------
+console.log("\n=== Guards: nothing non-finite reaches the student ===");
+
+// 4a. CAGR from positive to negative FCF: (negative ratio)^(1/years) = NaN.
+const cagrFlip = computeCagr({ fcf_first: 1000, fcf_last: -500, years: 5 });
+ok = assertEqual(cagrFlip.ok, false, "CAGR positive -> negative FCF reports not-ok (was NaN%)") && ok;
+
+// 4b. An empty base FCF is "not filled in yet", never "this company has negative FCF".
+const dcfEmptyFcf = computeDcf(
+  { ...companyXDcfInputs, base_fcf: undefined },
+  companyXSharePrice,
+  DEFAULT_VALUATION_CONFIG
+);
+ok = assertEqual(dcfEmptyFcf.available, false, "Empty base FCF -> DCF unavailable") && ok;
+if (dcfEmptyFcf.available === false) {
+  ok =
+    assertEqual(
+      dcfEmptyFcf.reason,
+      "missing_fcf",
+      "Empty base FCF reason is missing_fcf, not negative_fcf"
+    ) && ok;
+}
+
+// 4c. Overflow and degenerate discount rates must return a message, not a number.
+const hostileDcfCases = [
+  ["growth rate 1e300", { growth_1_5: 1e300, growth_6_10: 1e300 }],
+  ["share count 1e-320", { diluted_shares: 1e-320 }],
+  ["debt/cash at the float ceiling", { total_debt_and_leases: 1e308, cash_and_st_investments: -1e308 }],
+  ["discount rate exactly -100%", { risk_free_rate: -1, beta: 0, market_risk_premium: 0, terminal_growth: -1.5 }],
+];
+for (const [label, patch] of hostileDcfCases) {
+  const result = computeDcf({ ...googlDcfInputs, ...patch }, googlSharePrice, DEFAULT_VALUATION_CONFIG);
+  if (result.available) {
+    const clean = [result.sumPv, result.intrinsicValuePerShare, result.marginOfSafety].every((n) =>
+      Number.isFinite(n)
+    );
+    ok = assertEqual(clean, true, `DCF stays finite: ${label}`) && ok;
+  } else {
+    console.log(`  ok: DCF refuses "${label}" -> ${result.reason}`);
+  }
+}
+
+// 4d. A zero share price must not produce a confident entry-model badge.
+const zeroPriceModels = computeEntryModels(
+  googlEntryInputs,
+  googlCompanyFinancials,
+  0,
+  DEFAULT_VALUATION_CONFIG
+);
+ok = assertEqual(zeroPriceModels.pb.signal, null, "Share price 0 -> PB signal null, not Undervalued") && ok;
+ok = assertEqual(zeroPriceModels.pe.signal, null, "Share price 0 -> PE signal null") && ok;
+
 console.log(ok ? "\nAll assertions passed." : "\nSome assertions FAILED.");
 if (!ok) process.exit(1);

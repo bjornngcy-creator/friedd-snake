@@ -6,6 +6,7 @@ import {
   computeCagr,
   computeEntryModels,
   computeDcf,
+  isDcfBlockedByNegativeFcf,
   isDcfEnabled,
   resolveValuationConfig,
   type CompanyFinancialsInputs,
@@ -46,6 +47,11 @@ const LINKS = {
   balanceSheet: (t: string) => stockanalysis("financials/balance-sheet/", t),
   cashFlow: (t: string) => stockanalysis("financials/cash-flow-statement/", t),
   statistics: (t: string) => stockanalysis("statistics/", t),
+  // The Statistics page publishes only *current* ratios (PE, PB, P/OCF as of
+  // today). The three "5Y average" fields need the per-fiscal-year history,
+  // which lives on Financials > Ratios — pointing them at Statistics sent
+  // students to a page that does not contain the number being asked for.
+  ratios: (t: string) => stockanalysis("financials/ratios/", t),
   overview: (t: string) => stockanalysis("", t),
   treasury: "https://www.marketwatch.com/investing/bond/tmubmusd10y",
   marketRiskPremium: "https://www.market-risk-premia.com/us.html",
@@ -132,7 +138,12 @@ export function ValuationForm({
     [inputs.dcf, evaluation.sharePrice, config]
   );
 
+  // Two different states, deliberately not merged: the DCF inputs are locked
+  // until base FCF is positive (`dcfDisabledByFcf`), but only an actually
+  // entered non-positive FCF (`dcfNegativeFcf`) justifies telling the student
+  // anything about this company's cash flow.
   const dcfDisabledByFcf = !isDcfEnabled(inputs.dcf.base_fcf);
+  const dcfNegativeFcf = isDcfBlockedByNegativeFcf(inputs.dcf.base_fcf);
 
   return (
     <div>
@@ -145,6 +156,7 @@ export function ValuationForm({
             inputs={inputs}
             dcf={dcf}
             dcfDisabledByFcf={dcfDisabledByFcf}
+            dcfNegativeFcf={dcfNegativeFcf}
             companyName={evaluation.companyName}
             setCagrField={setCagrField}
             setDcfField={setDcfField}
@@ -189,11 +201,15 @@ export function ValuationForm({
               <SignalBadge signal={dcf.signal} />
             ) : (
               <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500">
-                DCF N/A
+                {dcf.reason === "missing_fcf" || dcf.reason === "missing_inputs" ? "DCF —" : "DCF N/A"}
               </span>
             )}
             <span className="text-sm font-semibold text-slate-900">
-              {dcf.available ? `MoS ${(dcf.marginOfSafety * 100).toFixed(1)}%` : "See models below"}
+              {dcf.available
+                ? `MoS ${(dcf.marginOfSafety * 100).toFixed(1)}%`
+                : dcf.reason === "missing_fcf" || dcf.reason === "missing_inputs"
+                  ? "Not filled in yet"
+                  : "See models below"}
             </span>
           </span>
           <span className="text-xs font-medium text-slate-500">
@@ -257,6 +273,7 @@ function DcfGroup({
   inputs,
   dcf,
   dcfDisabledByFcf,
+  dcfNegativeFcf,
   companyName,
   setCagrField,
   setDcfField,
@@ -266,6 +283,7 @@ function DcfGroup({
   inputs: ValuationInputs;
   dcf: DcfResult;
   dcfDisabledByFcf: boolean;
+  dcfNegativeFcf: boolean;
   companyName: string;
   setCagrField: (key: "fcf_first" | "fcf_last" | "years", value: number | undefined) => void;
   setDcfField: (key: keyof DcfInputs, value: number | undefined) => void;
@@ -416,7 +434,7 @@ function DcfGroup({
         </div>
 
         {/* DCF output */}
-        {dcfDisabledByFcf ? (
+        {dcfNegativeFcf ? (
           <div className="rounded-xl border border-dashed border-slate-300 bg-white p-5 text-sm text-slate-600">
             <p className="font-semibold text-slate-900">DCF valuation isn&apos;t available for {companyName}.</p>
             <p className="mt-2">
@@ -425,6 +443,10 @@ function DcfGroup({
               entry-price models below (PB, Dividend Yield, PE, P/OCF) and the PEG verdict instead to judge
               whether {companyName} looks attractively priced.
             </p>
+          </div>
+        ) : dcfDisabledByFcf ? (
+          <div className="rounded-xl border border-dashed border-slate-300 bg-white p-5 text-sm text-slate-500">
+            Start with the base free cash flow above — the rest of the DCF inputs unlock once it&apos;s in.
           </div>
         ) : dcf.available ? (
           <DcfOutput dcf={dcf} />
@@ -477,9 +499,15 @@ function DcfOutput({ dcf }: { dcf: Extract<DcfResult, { available: true }> }) {
       </p>
 
       <div className="mt-5 grid grid-cols-2 gap-4 border-t border-slate-100 pt-4 sm:grid-cols-3">
-        <Stat label="Sum of PV (Yr 1-10 + terminal)" value={formatMoney(dcf.sumPv)} />
-        <Stat label={dcf.netDebt < 0 ? "Net cash" : "Net debt"} value={formatMoney(Math.abs(dcf.netDebt))} />
-        <Stat label="Intrinsic value (total)" value={formatMoney(dcf.intrinsicValueTotal)} />
+        {/* The sheet works in USD millions throughout (framework-spec §2d,
+            C57 "in USD millions"), so these three totals carry the unit
+            explicitly — without it "3,099,678.5" is a number with no scale. */}
+        <Stat label="Sum of PV (Yr 1-10 + terminal), $M" value={formatMoney(dcf.sumPv)} />
+        <Stat
+          label={dcf.netDebt < 0 ? "Net cash ($M)" : "Net debt ($M)"}
+          value={formatMoney(Math.abs(dcf.netDebt))}
+        />
+        <Stat label="Intrinsic value (total, $M)" value={formatMoney(dcf.intrinsicValueTotal)} />
         <Stat label="Intrinsic value / share" value={`$${dcf.intrinsicValuePerShare.toFixed(2)}`} />
         <Stat
           label="Margin of Safety"
@@ -557,8 +585,8 @@ function EntryModelsGroup({
             label="5Y average PB ratio"
             value={inputs.entry_models.pb.avg_5y_pb}
             onChange={setPbField}
-            sourceUrl={LINKS.statistics(ticker)}
-            sourceLabel="Statistics"
+            sourceUrl={LINKS.ratios(ticker)}
+            sourceLabel="Financials > Ratios (average the 5 years)"
           />
         </ModelCard>
 
@@ -568,7 +596,7 @@ function EntryModelsGroup({
             value={inputs.entry_models.dividend.annual_dividend}
             onChange={setDividendField}
             sourceUrl={LINKS.statistics(ticker)}
-            sourceLabel="Overview — Dividends"
+            sourceLabel="Statistics — Dividend Per Share"
           />
         </ModelCard>
 
@@ -577,8 +605,8 @@ function EntryModelsGroup({
             label="5Y average PE ratio"
             value={inputs.entry_models.pe.avg_5y_pe}
             onChange={setPeField}
-            sourceUrl={LINKS.statistics(ticker)}
-            sourceLabel="Statistics"
+            sourceUrl={LINKS.ratios(ticker)}
+            sourceLabel="Financials > Ratios (average the 5 years)"
           />
         </ModelCard>
 
@@ -602,8 +630,8 @@ function EntryModelsGroup({
               label="5Y average P/OCF ratio"
               value={inputs.entry_models.pocf.avg_5y_pocf}
               onChange={(v) => setPocfField("avg_5y_pocf", v)}
-              sourceUrl={LINKS.statistics(ticker)}
-              sourceLabel="Statistics"
+              sourceUrl={LINKS.ratios(ticker)}
+              sourceLabel="Financials > Ratios (average the 5 years)"
             />
           </div>
         </ModelCard>
@@ -700,7 +728,9 @@ function SummaryPanel({
           </>
         ) : (
           <p className="text-sm text-slate-500">
-            {dcf.reason === "negative_fcf" ? "DCF unavailable — see the entry-price models." : dcf.message}
+            {dcf.reason === "negative_fcf"
+              ? "DCF unavailable for this company — see the entry-price models."
+              : dcf.message}
           </p>
         )}
       </div>
@@ -759,7 +789,15 @@ function NumberField({
   // Percent-typed fields are stored as decimals (0.10 = 10%) but keying in
   // "10" reads more naturally than "0.10" — display/edit as whole percent,
   // convert on the way in/out.
-  const displayValue = value == null ? "" : percent ? value * 100 : value;
+  //
+  // The round-trip has to be de-noised: a student types 3.974, it's stored as
+  // 3.974/100 = 0.03974, and 0.03974 * 100 comes back as 3.9740000000000006
+  // in IEEE-754 — which is what the risk-free rate field actually showed
+  // (and, at 375px, overflowed its own box). toFixed(10) is well inside
+  // double precision for any rate a human types, and Number() strips the
+  // trailing zeros it leaves behind.
+  const displayValue =
+    value == null ? "" : percent ? Number((value * 100).toFixed(10)) : value;
 
   return (
     <label className="block">

@@ -1,14 +1,43 @@
 @import "tailwindcss";
 
+/* Phase 3.1 item 15 — class-based dark mode. Tailwind v4 defaults `dark:` to
+   `prefers-color-scheme`; this custom variant makes it follow a `.dark`
+   class on <html> instead, toggled by the header switch (src/components/nav.tsx)
+   and set before paint by the inline script in src/app/layout.tsx (no flash). */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* Invest With Bjorn brand palette (01-SKILLS/brand-guide.md v1.1) */
 :root {
   --background: #f5f3ee; /* Warm Off-white */
   --foreground: #1a2636; /* Midnight Navy */
-  --brand: #1a2636; /* Midnight Navy — primary */
+  --brand: #1a2636; /* Midnight Navy — primary, stays constant in both themes (the header bar is always brand-navy) */
   --brand-dark: #10161f; /* Navy, darkened for hover */
   --accent: #d4a93c; /* Wealth Gold — CTAs, borders, headlines on dark */
   --accent-dark: #aa8730; /* Gold, darkened for hover */
   --muted: #8fa3bc; /* Steel Muted — secondary text on dark */
+
+  /* Surface tokens (Phase 3.1) — every card/table/section that used to
+     hardcode bg-white / border-slate-200 / text-slate-* now reads these, so
+     dark mode is one variable flip instead of a second color decision per
+     element. Light values below match the slate shades already in use. */
+  --surface: #ffffff; /* was bg-white (cards) */
+  --surface-muted: #f8fafc; /* was bg-slate-50 (group/section wrapper bg) */
+  --surface-sunken: #f1f5f9; /* was bg-slate-100 (progress track, dividers) */
+  --subtle: #e2e8f0; /* was border-slate-200 / divide-slate-100 */
+  --text-secondary: #64748b; /* was text-slate-500 / text-slate-600 */
+  --text-tertiary: #94a3b8; /* was text-slate-400 / text-slate-300 */
+}
+
+:root.dark {
+  --background: #0f1520; /* near --brand-dark, page bg */
+  --foreground: #f1efe9; /* full-circle reuse of the light theme's warm off-white background as dark-mode text */
+
+  --surface: #1a2230; /* cards — a step lighter than the page bg, still navy-toned */
+  --surface-muted: #161c27; /* group/section wrapper bg */
+  --surface-sunken: #232c3b; /* progress track, dividers */
+  --subtle: #2c3646; /* borders */
+  --text-secondary: #8fa3bc; /* reuses brand --muted (Steel Muted) */
+  --text-tertiary: #64748b;
 }
 
 @theme inline {
@@ -19,6 +48,12 @@
   --color-accent: var(--accent);
   --color-accent-dark: var(--accent-dark);
   --color-muted: var(--muted);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-subtle: var(--subtle);
+  --color-secondary: var(--text-secondary);
+  --color-tertiary: var(--text-tertiary);
   --font-sans: var(--font-dm-sans);
   --font-serif: var(--font-dm-serif);
 }

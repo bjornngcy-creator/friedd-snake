@@ -12,8 +12,10 @@ export type EvaluationRow = {
   verdict: "PASS" | "FAIL" | null;
   status: string;
   updatedAt: string;
-  /** DCF margin of safety (decimal, e.g. -0.2708 = -27.08%). Null when DCF is unavailable or valuation hasn't been started. */
-  marginOfSafety: number | null;
+  /** Phase 3.1 item 8 — live-recomputed count of models signaling Undervalued
+   * out of models with enough inputs to signal at all. Null when nothing has
+   * enough inputs yet (valuation not started, or fewer than every field filled in). */
+  valuationBadge: { undervalued: number; total: number } | null;
 };
 
 type SortDirection = "asc" | "desc";
@@ -38,24 +40,26 @@ export function EvaluationsTable({ rows }: { rows: EvaluationRow[] }) {
     setValuationSort((prev) => (prev === "desc" ? "asc" : prev === "asc" ? null : "desc"));
   }
 
-  // Rows with no margin of safety (DCF unavailable or valuation never
-  // opened) always sort to the bottom, regardless of direction — a "—" isn't
-  // a meaningful value to rank against real percentages either way.
+  // Rows with no valuation badge (nothing computed yet) always sort to the
+  // bottom, regardless of direction — a "—" isn't a meaningful value to rank
+  // against real counts either way.
   const sortedRows = useMemo(() => {
     if (!valuationSort) return rows;
-    const withValue = rows.filter((r) => r.marginOfSafety != null);
-    const withoutValue = rows.filter((r) => r.marginOfSafety == null);
+    const withValue = rows.filter((r) => r.valuationBadge != null);
+    const withoutValue = rows.filter((r) => r.valuationBadge == null);
     withValue.sort((a, b) => {
-      const diff = (a.marginOfSafety as number) - (b.marginOfSafety as number);
+      const av = a.valuationBadge!;
+      const bv = b.valuationBadge!;
+      const diff = av.undervalued - bv.undervalued || av.total - bv.total;
       return valuationSort === "asc" ? diff : -diff;
     });
     return [...withValue, ...withoutValue];
   }, [rows, valuationSort]);
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+    <div className="overflow-x-auto rounded-xl border border-subtle bg-surface shadow-sm">
       <table className="w-full min-w-[720px] text-left text-sm">
-        <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+        <thead className="border-b border-subtle bg-surface-muted text-xs uppercase tracking-wide text-secondary">
           <tr>
             <th className="px-4 py-3">Ticker</th>
             <th className="px-4 py-3">Company</th>
@@ -68,10 +72,10 @@ export function EvaluationsTable({ rows }: { rows: EvaluationRow[] }) {
                   e.stopPropagation();
                   toggleValuationSort();
                 }}
-                className="inline-flex items-center gap-1 uppercase tracking-wide text-slate-500 transition hover:text-brand"
+                className="inline-flex items-center gap-1 uppercase tracking-wide text-secondary transition hover:text-brand dark:hover:text-accent"
               >
                 Valuation
-                <span aria-hidden className="text-slate-400">
+                <span aria-hidden className="text-tertiary">
                   {valuationSort === "asc" ? "↑" : valuationSort === "desc" ? "↓" : "↕"}
                 </span>
               </button>
@@ -80,25 +84,25 @@ export function EvaluationsTable({ rows }: { rows: EvaluationRow[] }) {
             <th className="px-4 py-3" />
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-100">
+        <tbody className="divide-y divide-subtle">
           {sortedRows.map((row) => (
             <tr
               key={row.id}
-              className="cursor-pointer transition hover:bg-slate-50"
+              className="cursor-pointer transition hover:bg-surface-muted"
               onClick={() => router.push(`/evaluation/${row.ticker}`)}
             >
-              <td className="px-4 py-3 font-semibold text-slate-900">{row.ticker}</td>
-              <td className="px-4 py-3 text-slate-600">{row.companyName ?? "—"}</td>
+              <td className="px-4 py-3 font-semibold text-foreground">{row.ticker}</td>
+              <td className="px-4 py-3 text-secondary">{row.companyName ?? "—"}</td>
               <td className="px-4 py-3">
                 <ScoreChip status={row.status} finalScore={row.finalScore} />
               </td>
-              <td className="px-4 py-3 text-slate-600">
+              <td className="px-4 py-3 text-secondary">
                 {row.status === "draft" ? "—" : (row.verdict ?? "—")}
               </td>
               <td className="px-4 py-3">
-                <ValuationChip marginOfSafety={row.marginOfSafety} />
+                <ValuationChip badge={row.valuationBadge} />
               </td>
-              <td className="px-4 py-3 text-slate-500">
+              <td className="px-4 py-3 text-secondary">
                 {new Date(row.updatedAt).toLocaleDateString("en-US", {
                   month: "short",
                   day: "numeric",
@@ -112,7 +116,7 @@ export function EvaluationsTable({ rows }: { rows: EvaluationRow[] }) {
                     e.stopPropagation();
                     handleDelete(row.id, row.ticker);
                   }}
-                  className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-500 transition hover:border-red-300 hover:text-red-600 disabled:opacity-50"
+                  className="rounded-md border border-subtle px-2 py-1 text-xs text-secondary transition hover:border-red-300 hover:text-red-600 disabled:opacity-50 dark:hover:border-red-700 dark:hover:text-red-400"
                 >
                   {isPending && pendingId === row.id ? "Deleting…" : "Delete"}
                 </button>
@@ -125,18 +129,20 @@ export function EvaluationsTable({ rows }: { rows: EvaluationRow[] }) {
   );
 }
 
-function ValuationChip({ marginOfSafety }: { marginOfSafety: number | null }) {
-  if (marginOfSafety == null) {
-    return <span className="text-slate-400">—</span>;
+function ValuationChip({ badge }: { badge: { undervalued: number; total: number } | null }) {
+  if (badge == null) {
+    return <span className="text-tertiary">—</span>;
   }
-  const positive = marginOfSafety >= 0;
+  const majorityUndervalued = badge.undervalued * 2 > badge.total;
   return (
     <span
       className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${
-        positive ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
+        majorityUndervalued
+          ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+          : "bg-surface-sunken text-secondary"
       }`}
     >
-      {(marginOfSafety * 100).toFixed(1)}%
+      UV {badge.undervalued}/{badge.total}
     </span>
   );
 }
@@ -144,7 +150,7 @@ function ValuationChip({ marginOfSafety }: { marginOfSafety: number | null }) {
 function ScoreChip({ status, finalScore }: { status: string; finalScore: number | null }) {
   if (status === "draft") {
     return (
-      <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">
+      <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
         {finalScore != null ? finalScore.toFixed(1) : "—"} · Draft
       </span>
     );
@@ -154,7 +160,9 @@ function ScoreChip({ status, finalScore }: { status: string; finalScore: number 
   return (
     <span
       className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${
-        passed ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
+        passed
+          ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+          : "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
       }`}
     >
       {finalScore != null ? finalScore.toFixed(1) : "—"}

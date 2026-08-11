@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { signOut } from "@/lib/actions/auth";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export function Nav({ email }: { email: string | null | undefined }) {
   return (
@@ -14,8 +15,9 @@ export function Nav({ email }: { email: string | null | undefined }) {
           </span>
         </Link>
 
-        <div className="flex items-center gap-4">
-          {email && <span className="text-sm text-muted">{email}</span>}
+        <div className="flex items-center gap-3">
+          {email && <span className="hidden text-sm text-muted sm:inline">{email}</span>}
+          <ThemeToggle />
           <form action={signOut}>
             <button
               type="submit"

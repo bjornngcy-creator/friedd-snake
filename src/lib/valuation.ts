@@ -1,22 +1,35 @@
-// Phase 3 valuation engine — the ONE shared module that computes every
+// Phase 3.1 valuation engine — the ONE shared module that computes every
 // valuation number. Pure functions, no side effects, importable by the
-// client component (live recalc on every input change) and the server
-// action (recomputes server-side before persisting, never trusts a
-// client-sent summary — same philosophy as src/lib/scoring.ts).
+// client component (live recalc on every input change), the server action
+// (recomputes server-side before persisting, never trusts a client-sent
+// summary — same philosophy as src/lib/scoring.ts), and the dashboard (live
+// recompute of the sortable valuation badge, §Phase 3.1 item 8 — no verdict
+// is ever persisted).
 //
 // Source of truth: docs/framework-spec.md §2 "STEP 2: VALUATIONS" (sheet
-// formulas) and docs/phase3-valuation-spec.md (buildable spec). Verified
-// against the frameworks-spec's worked GOOGL example in
-// scripts/verify-valuation.mjs: discount rate 6.5573%, PB entry $212.68,
-// dividend entry $16.80, PE entry $252.49, PEG Overvalued, Year 1 FCF
-// $80,592.6M, Year 1 PV $75,633.11M, sum of PV $3,099,678.52M, net debt
-// -$59,847M (net cash), intrinsic value/share $258.34, MoS -27.08% ->
-// Overvalued DCF signal.
+// formulas) and docs/phase3-valuation-spec.md (buildable spec, updated for
+// Phase 3.1). DCF math is UNCHANGED from Phase 3 and still verified against
+// the frameworks-spec's worked GOOGL example in scripts/verify-valuation.mjs:
+// discount rate 6.5573%, Year 1 FCF $80,592.6M, Year 1 PV $75,633.11M, sum of
+// PV $3,099,678.52M, net debt -$59,847M (net cash), intrinsic value/share
+// $258.34, MoS -27.08% -> Overvalued DCF signal.
 //
-// Owner-locked decision: there is no overall/blended valuation verdict
-// anywhere in this app. Every model below returns its OWN independent
-// signal; nothing combines, votes across, or averages them. PEG is
-// informational only (never gates or scores anything).
+// Phase 3.1 changes (owner-approved rework, see docs/phase3-valuation-spec.md):
+//   - Debt input is now 4 fields (short/long-term debt, short/long-term
+//     lease), auto-summed. Backward-compatible with the old single
+//     `total_debt_and_leases` field via migrate-on-read.
+//   - P/B, P/E and P/OCF are now "5Y average multiple" models: 5 yearly
+//     inputs -> average, compared against a CURRENT multiple the app derives
+//     from live share price + the student's own fundamentals (never
+//     auto-fetched). Signal = current multiple vs 5Y average, same shape
+//     P/OCF already used in Phase 3.
+//   - P/OCF's ocf_per_share input is gone — replaced with a total OCF ($)
+//     input, OCF/share is derived by dividing by diluted shares outstanding
+//     (reusing the DCF section's shares input, never re-asked).
+//   - No overall/blended verdict, ever (unchanged from Phase 3). No
+//     "valuation_summary" persistence either — Phase 3.1 stops writing that
+//     column; every consumer (the valuation page, the dashboard) recomputes
+//     live from valuation_inputs + the evaluation's cached share price.
 
 export type Signal = "Undervalued" | "Fair Value" | "Overvalued";
 
@@ -62,15 +75,25 @@ export type CagrHelperInputs = {
   years: number | null | undefined;
 };
 
+/** 5 yearly multiple readings (any order the student wants — averaged, not chronologically validated). Always exactly 5 slots; blanks are `undefined`. */
+export type YearlyMultiple = [
+  number | null | undefined,
+  number | null | undefined,
+  number | null | undefined,
+  number | null | undefined,
+  number | null | undefined,
+];
+
+function emptyYearly(): YearlyMultiple {
+  return [undefined, undefined, undefined, undefined, undefined];
+}
+
 export type EntryModelInputs = {
-  pb: { avg_5y_pb: number | null | undefined };
+  pb: { yearly: YearlyMultiple };
   dividend: { annual_dividend: number | null | undefined };
-  pe: { avg_5y_pe: number | null | undefined };
-  pocf: {
-    ocf_per_share: number | null | undefined;
-    current_pocf: number | null | undefined;
-    avg_5y_pocf: number | null | undefined;
-  };
+  pe: { yearly: YearlyMultiple };
+  /** `ocf_total` = total operating cash flow ($M), NOT per-share — OCF/share is derived from `dcf.diluted_shares` (Phase 3.1 fix, spec item 10). */
+  pocf: { ocf_total: number | null | undefined; yearly: YearlyMultiple };
   peg: { peg_ratio: number | null | undefined };
 };
 
@@ -81,7 +104,17 @@ export type DcfInputs = {
   terminal_growth: number | null | undefined;
   diluted_shares: number | null | undefined;
   cash_and_st_investments: number | null | undefined;
-  total_debt_and_leases: number | null | undefined;
+  /**
+   * Phase 3.1: the single `total_debt_and_leases` field became 4 fields.
+   * Each is independently optional and defaults to 0 when summed — a
+   * company with no lease liabilities shouldn't have to type a 0. Old rows
+   * are migrated on read (see `legacyDebtTotal` below); the "auto-sum"
+   * total isn't stored, it's always derived at compute time.
+   */
+  short_term_debt: number | null | undefined;
+  long_term_debt: number | null | undefined;
+  short_term_lease: number | null | undefined;
+  long_term_lease: number | null | undefined;
   risk_free_rate: number | null | undefined;
   market_risk_premium: number | null | undefined;
   beta: number | null | undefined;
@@ -99,10 +132,10 @@ export function emptyValuationInputs(): ValuationInputs {
     company_financials: { eps: undefined, book_value_per_share: undefined },
     cagr_helper: { fcf_first: undefined, fcf_last: undefined, years: undefined },
     entry_models: {
-      pb: { avg_5y_pb: undefined },
+      pb: { yearly: emptyYearly() },
       dividend: { annual_dividend: undefined },
-      pe: { avg_5y_pe: undefined },
-      pocf: { ocf_per_share: undefined, current_pocf: undefined, avg_5y_pocf: undefined },
+      pe: { yearly: emptyYearly() },
+      pocf: { ocf_total: undefined, yearly: emptyYearly() },
       peg: { peg_ratio: undefined },
     },
     dcf: {
@@ -112,12 +145,45 @@ export function emptyValuationInputs(): ValuationInputs {
       terminal_growth: undefined,
       diluted_shares: undefined,
       cash_and_st_investments: undefined,
-      total_debt_and_leases: undefined,
+      short_term_debt: undefined,
+      long_term_debt: undefined,
+      short_term_lease: undefined,
+      long_term_lease: undefined,
       risk_free_rate: undefined,
       market_risk_premium: undefined,
       beta: undefined,
     },
   };
+}
+
+function numOrUndefined(v: unknown): number | undefined {
+  if (v === null || v === undefined || v === "") return undefined;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function normalizeYearly(raw: unknown): YearlyMultiple {
+  const arr = Array.isArray(raw) ? raw : [];
+  const out = emptyYearly();
+  for (let i = 0; i < 5; i++) out[i] = numOrUndefined(arr[i]);
+  return out;
+}
+
+/**
+ * Reads the legacy single `total_debt_and_leases` value off a raw (pre-
+ * Phase-3.1) stored `valuation_inputs.dcf` blob, if present. Exported
+ * standalone (rather than folded silently into normalizeValuationInputs) so
+ * the UI can show a one-time "migrated from your old total debt figure" note
+ * — the migration itself still happens inside normalizeValuationInputs so
+ * every consumer of a normalized ValuationInputs gets a sane, already-summed
+ * total without having to know this history exists.
+ */
+export function legacyDebtTotal(raw: unknown): number | null {
+  if (!raw || typeof raw !== "object") return null;
+  const dcf = (raw as Record<string, unknown>).dcf;
+  if (!dcf || typeof dcf !== "object") return null;
+  const legacy = numOrUndefined((dcf as Record<string, unknown>).total_debt_and_leases);
+  return legacy ?? null;
 }
 
 /** Deep-merges a partial/raw inputs object (e.g. from the DB or a client request) onto the empty shape, so missing nested keys never crash a `.foo.bar` access. */
@@ -129,13 +195,33 @@ export function normalizeValuationInputs(raw: unknown): ValuationInputs {
   const cf = (r.company_financials as Partial<CompanyFinancialsInputs>) ?? {};
   const cagr = (r.cagr_helper as Partial<CagrHelperInputs>) ?? {};
   const em = (r.entry_models as Record<string, unknown>) ?? {};
-  const dcf = (r.dcf as Partial<DcfInputs>) ?? {};
+  const dcf = (r.dcf as Record<string, unknown>) ?? {};
 
-  const pb = (em.pb as Partial<EntryModelInputs["pb"]>) ?? {};
+  const pb = (em.pb as Record<string, unknown>) ?? {};
   const dividend = (em.dividend as Partial<EntryModelInputs["dividend"]>) ?? {};
-  const pe = (em.pe as Partial<EntryModelInputs["pe"]>) ?? {};
-  const pocf = (em.pocf as Partial<EntryModelInputs["pocf"]>) ?? {};
+  const pe = (em.pe as Record<string, unknown>) ?? {};
+  const pocf = (em.pocf as Record<string, unknown>) ?? {};
   const peg = (em.peg as Partial<EntryModelInputs["peg"]>) ?? {};
+
+  // Phase 3.1 debt migration — old rows only ever had `total_debt_and_leases`.
+  // If none of the 4 new fields have a value yet, fold the legacy total into
+  // `long_term_debt` (an arbitrary but harmless bucket — it only matters that
+  // the SUM comes out right, since net debt is the only thing that reads
+  // these 4 fields) so the DCF keeps working for evaluations saved before
+  // this rework, without the student having to re-enter anything.
+  const short_term_debt = numOrUndefined(dcf.short_term_debt);
+  let long_term_debt = numOrUndefined(dcf.long_term_debt);
+  const short_term_lease = numOrUndefined(dcf.short_term_lease);
+  const long_term_lease = numOrUndefined(dcf.long_term_lease);
+  if (
+    short_term_debt === undefined &&
+    long_term_debt === undefined &&
+    short_term_lease === undefined &&
+    long_term_lease === undefined
+  ) {
+    const legacy = numOrUndefined(dcf.total_debt_and_leases);
+    if (legacy !== undefined) long_term_debt = legacy;
+  }
 
   return {
     company_financials: {
@@ -148,14 +234,10 @@ export function normalizeValuationInputs(raw: unknown): ValuationInputs {
       years: numOrUndefined(cagr.years),
     },
     entry_models: {
-      pb: { avg_5y_pb: numOrUndefined(pb.avg_5y_pb) },
+      pb: { yearly: normalizeYearly(pb.yearly) },
       dividend: { annual_dividend: numOrUndefined(dividend.annual_dividend) },
-      pe: { avg_5y_pe: numOrUndefined(pe.avg_5y_pe) },
-      pocf: {
-        ocf_per_share: numOrUndefined(pocf.ocf_per_share),
-        current_pocf: numOrUndefined(pocf.current_pocf),
-        avg_5y_pocf: numOrUndefined(pocf.avg_5y_pocf),
-      },
+      pe: { yearly: normalizeYearly(pe.yearly) },
+      pocf: { ocf_total: numOrUndefined(pocf.ocf_total), yearly: normalizeYearly(pocf.yearly) },
       peg: { peg_ratio: numOrUndefined(peg.peg_ratio) },
     },
     dcf: {
@@ -165,18 +247,15 @@ export function normalizeValuationInputs(raw: unknown): ValuationInputs {
       terminal_growth: numOrUndefined(dcf.terminal_growth),
       diluted_shares: numOrUndefined(dcf.diluted_shares),
       cash_and_st_investments: numOrUndefined(dcf.cash_and_st_investments),
-      total_debt_and_leases: numOrUndefined(dcf.total_debt_and_leases),
+      short_term_debt,
+      long_term_debt,
+      short_term_lease,
+      long_term_lease,
       risk_free_rate: numOrUndefined(dcf.risk_free_rate),
       market_risk_premium: numOrUndefined(dcf.market_risk_premium),
       beta: numOrUndefined(dcf.beta),
     },
   };
-}
-
-function numOrUndefined(v: unknown): number | undefined {
-  if (v === null || v === undefined || v === "") return undefined;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : undefined;
 }
 
 function isNum(v: number | null | undefined): v is number {
@@ -194,7 +273,7 @@ export type CagrResult =
 export function computeCagr(inputs: CagrHelperInputs): CagrResult {
   const { fcf_first, fcf_last, years } = inputs;
   if (!isNum(fcf_first) || !isNum(fcf_last) || !isNum(years) || years <= 0) {
-    return { ok: false, error: "Enter first-year FCF, last-year FCF, and number of years." };
+    return { ok: false, error: "Enter first-year FCF, latest-year FCF, and number of years." };
   }
   if (fcf_first <= 0) {
     return { ok: false, error: "Can't compute CAGR — starting FCF must be positive." };
@@ -217,12 +296,20 @@ export function computeCagr(inputs: CagrHelperInputs): CagrResult {
   return { ok: true, cagr };
 }
 
+/** Soft (non-blocking) range warning for the CAGR helper's "number of years" field — spec §2.1. */
+export function cagrYearsRangeWarning(years: number | null | undefined): string | null {
+  if (!isNum(years)) return null;
+  if (years < 1 || years > 20) {
+    return "That's an unusual number of years to project over — typically 1-20.";
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
-// 1.3 Entry-price models — each returns its own independent signal.
-// diff_pct = (entry_price - current_share_price) / current_share_price
-// Undervalued if diff_pct > 0, Overvalued if diff_pct < 0, Fair Value if 0.
-// (PB/Dividend/PE use this; P/OCF uses its own current-vs-average
-// comparison per spec §1.3; PEG uses its own ratio verdict.)
+// 1.3 Entry-price models. Dividend keeps the original "entry price vs share
+// price" comparison. P/B, P/E and P/OCF are all "5Y average multiple"
+// models (Phase 3.1): a derived CURRENT multiple compared against the
+// student's own 5Y average, same shape P/OCF already used pre-3.1.
 // ---------------------------------------------------------------------------
 
 /**
@@ -248,15 +335,6 @@ function entryModelResult(entryPrice: number, sharePrice: number | null | undefi
   return { entryPrice, signal: priceDiffSignal(entryPrice, sharePrice as number) };
 }
 
-export function computePbModel(
-  bookValuePerShare: number | null | undefined,
-  avg5yPb: number | null | undefined,
-  sharePrice: number | null | undefined
-): EntryModelResult {
-  if (!isNum(bookValuePerShare) || !isNum(avg5yPb)) return { entryPrice: null, signal: null };
-  return entryModelResult(bookValuePerShare * avg5yPb, sharePrice);
-}
-
 export function computeDividendModel(
   annualDividend: number | null | undefined,
   sharePrice: number | null | undefined,
@@ -264,33 +342,6 @@ export function computeDividendModel(
 ): EntryModelResult {
   if (!isNum(annualDividend) || !dividendYieldAssumption) return { entryPrice: null, signal: null };
   return entryModelResult(annualDividend / dividendYieldAssumption, sharePrice);
-}
-
-export function computePeModel(
-  eps: number | null | undefined,
-  avg5yPe: number | null | undefined,
-  sharePrice: number | null | undefined
-): EntryModelResult {
-  if (!isNum(eps) || !isNum(avg5yPe)) return { entryPrice: null, signal: null };
-  return entryModelResult(eps * avg5yPe, sharePrice);
-}
-
-/** P/OCF — the one model with a current-vs-5y-average comparison built in, per spec §1.3 (not diff-vs-share-price like the other three). */
-export function computePocfModel(
-  ocfPerShare: number | null | undefined,
-  currentPocf: number | null | undefined,
-  avg5yPocf: number | null | undefined
-): EntryModelResult {
-  if (!isNum(ocfPerShare) || !isNum(avg5yPocf)) return { entryPrice: null, signal: null };
-  const rawEntryPrice = ocfPerShare * avg5yPocf;
-  const entryPrice = Number.isFinite(rawEntryPrice) ? rawEntryPrice : null;
-  let signal: Signal | null = null;
-  if (isNum(currentPocf)) {
-    if (currentPocf < avg5yPocf) signal = "Undervalued";
-    else if (currentPocf > avg5yPocf) signal = "Overvalued";
-    else signal = "Fair Value";
-  }
-  return { entryPrice, signal };
 }
 
 /** PEG verdict — informational only (owner-locked). Never combined with anything. */
@@ -301,36 +352,159 @@ export function computePegVerdict(pegRatio: number | null | undefined): Signal |
   return "Fair Value";
 }
 
+/** Average of a YearlyMultiple — requires all 5 slots filled (a partial average isn't a meaningful "5-year average"). */
+export function averageYearly(values: YearlyMultiple): number | null {
+  const nums: number[] = [];
+  for (const v of values) {
+    if (!isNum(v)) return null;
+    nums.push(v);
+  }
+  const sum = nums.reduce((a, b) => a + b, 0);
+  const avg = sum / nums.length;
+  return Number.isFinite(avg) ? avg : null;
+}
+
+function multipleSignal(current: number | null, avg5y: number | null): Signal | null {
+  if (current == null || avg5y == null || !Number.isFinite(current) || !Number.isFinite(avg5y)) return null;
+  if (current < avg5y) return "Undervalued";
+  if (current > avg5y) return "Overvalued";
+  return "Fair Value";
+}
+
+/** Shape shared by the 3 "5Y average multiple" models (P/B, P/E, P/OCF). */
+export type MultipleModelResult = {
+  avg5y: number | null;
+  currentMultiple: number | null;
+  entryPrice: number | null;
+  signal: Signal | null;
+};
+
+function multipleModelResult(
+  perShareFundamental: number | null,
+  yearly: YearlyMultiple,
+  sharePrice: number | null | undefined
+): MultipleModelResult {
+  const avg5y = averageYearly(yearly);
+  const currentMultiple =
+    perShareFundamental != null && perShareFundamental > 0 && isNum(sharePrice) && sharePrice > 0
+      ? sharePrice / perShareFundamental
+      : null;
+  const rawEntryPrice = perShareFundamental != null && avg5y != null ? perShareFundamental * avg5y : null;
+  const entryPrice = rawEntryPrice != null && Number.isFinite(rawEntryPrice) ? rawEntryPrice : null;
+  return {
+    avg5y,
+    currentMultiple: currentMultiple != null && Number.isFinite(currentMultiple) ? currentMultiple : null,
+    entryPrice,
+    signal: multipleSignal(currentMultiple, avg5y),
+  };
+}
+
+export function computePbModel(
+  bookValuePerShare: number | null | undefined,
+  yearly: YearlyMultiple,
+  sharePrice: number | null | undefined
+): MultipleModelResult {
+  return multipleModelResult(isNum(bookValuePerShare) ? bookValuePerShare : null, yearly, sharePrice);
+}
+
+export function computePeModel(
+  eps: number | null | undefined,
+  yearly: YearlyMultiple,
+  sharePrice: number | null | undefined
+): MultipleModelResult {
+  return multipleModelResult(isNum(eps) ? eps : null, yearly, sharePrice);
+}
+
+/**
+ * P/OCF — Phase 3.1 fix (spec item 10): the student no longer sources
+ * "OCF per share" (not published on stockanalysis.com). They give total OCF
+ * ($M) instead, and OCF/share is derived from `dilutedShares` — the same
+ * shares-outstanding number already collected for the DCF, reused here
+ * rather than asked twice.
+ */
+export function computePocfModel(
+  ocfTotal: number | null | undefined,
+  yearly: YearlyMultiple,
+  dilutedShares: number | null | undefined,
+  sharePrice: number | null | undefined
+): MultipleModelResult {
+  const ocfPerShare =
+    isNum(ocfTotal) && isNum(dilutedShares) && dilutedShares > 0 ? ocfTotal / dilutedShares : null;
+  return multipleModelResult(
+    ocfPerShare != null && Number.isFinite(ocfPerShare) ? ocfPerShare : null,
+    yearly,
+    sharePrice
+  );
+}
+
 export type EntryModelsResult = {
-  pb: EntryModelResult;
+  pb: MultipleModelResult;
   dividend: EntryModelResult;
-  pe: EntryModelResult;
-  pocf: EntryModelResult;
+  pe: MultipleModelResult;
+  pocf: MultipleModelResult;
   pegVerdict: Signal | null;
+  /** Derived OCF/share, exposed for the "show the math" formula display — null when total OCF or shares aren't in yet. */
+  ocfPerShare: number | null;
 };
 
 export function computeEntryModels(
   inputs: EntryModelInputs,
   companyFinancials: CompanyFinancialsInputs,
   sharePrice: number | null | undefined,
+  dilutedShares: number | null | undefined,
   config: ValuationConfig
 ): EntryModelsResult {
+  const ocfPerShare =
+    isNum(inputs.pocf.ocf_total) && isNum(dilutedShares) && dilutedShares > 0
+      ? inputs.pocf.ocf_total / dilutedShares
+      : null;
+
   return {
-    pb: computePbModel(companyFinancials.book_value_per_share, inputs.pb.avg_5y_pb, sharePrice),
+    pb: computePbModel(companyFinancials.book_value_per_share, inputs.pb.yearly, sharePrice),
     dividend: computeDividendModel(
       inputs.dividend.annual_dividend,
       sharePrice,
       config.dividend_yield_assumption
     ),
-    pe: computePeModel(companyFinancials.eps, inputs.pe.avg_5y_pe, sharePrice),
-    pocf: computePocfModel(inputs.pocf.ocf_per_share, inputs.pocf.current_pocf, inputs.pocf.avg_5y_pocf),
+    pe: computePeModel(companyFinancials.eps, inputs.pe.yearly, sharePrice),
+    pocf: computePocfModel(inputs.pocf.ocf_total, inputs.pocf.yearly, dilutedShares, sharePrice),
     pegVerdict: computePegVerdict(inputs.peg.peg_ratio),
+    ocfPerShare: ocfPerShare != null && Number.isFinite(ocfPerShare) ? ocfPerShare : null,
   };
+}
+
+/** Soft (non-blocking) range warning: BVPS <= 0 makes P/B not meaningful — spec item 12. */
+export function bvpsRangeWarning(bvps: number | null | undefined): string | null {
+  if (isNum(bvps) && bvps <= 0) {
+    return "P/B won't be meaningful with a zero or negative book value per share.";
+  }
+  return null;
+}
+
+/** Soft (non-blocking) range warning: negative EPS makes P/E not meaningful — spec item 12. */
+export function epsRangeWarning(eps: number | null | undefined): string | null {
+  if (isNum(eps) && eps < 0) {
+    return "Negative EPS makes P/E not meaningful here — the current multiple will be negative.";
+  }
+  return null;
+}
+
+/** Soft (non-blocking) growth-decay hint — DCF growth normally decays from Yrs 1-5 to Yrs 6-10 (spec §2.1 / item 12). */
+export function growthDecayWarning(
+  growth1_5: number | null | undefined,
+  growth6_10: number | null | undefined
+): string | null {
+  if (isNum(growth1_5) && isNum(growth6_10) && growth6_10 >= growth1_5) {
+    return "Growth usually decays over time — Yrs 6-10 growth is typically lower than Yrs 1-5, not equal or higher.";
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------
 // 1.4 DCF chain — CAPM discount rate, 10-year two-phase FCF projection,
 // Gordon Growth terminal value, net-debt adjustment, margin of safety.
+// Math is UNCHANGED from Phase 3 — only the debt/lease input shape changed
+// (4 fields auto-summed instead of 1).
 // ---------------------------------------------------------------------------
 
 export type DcfYearRow = {
@@ -361,10 +535,11 @@ export type DcfAvailable = {
   years: DcfYearRow[]; // Year 0..10, inclusive — Year 0 is reference-only, excluded from sumPv.
   terminalValue: number;
   sumPv: number; // sum of Year 1-10 PV + PV of terminal value. Year 0 PV is deliberately excluded.
-  netDebt: number; // total_debt_and_leases - cash_and_st_investments. Negative = net cash.
+  totalDebtAndLeases: number; // auto-summed from the 4 debt/lease inputs — exposed for "show the math".
+  netDebt: number; // totalDebtAndLeases - cash_and_st_investments. Negative = net cash.
   intrinsicValueTotal: number;
   intrinsicValuePerShare: number;
-  marginOfSafety: number; // (intrinsic/share - share price) / share price
+  marginOfSafety: number; // (intrinsic/share - share price) / share price — computed internally to drive the signal band; never displayed (owner-locked, Phase 3.1 item 7).
   signal: Signal;
 };
 
@@ -392,7 +567,10 @@ export function computeDcf(
     terminal_growth,
     diluted_shares,
     cash_and_st_investments,
-    total_debt_and_leases,
+    short_term_debt,
+    long_term_debt,
+    short_term_lease,
+    long_term_lease,
     risk_free_rate,
     market_risk_premium,
     beta,
@@ -415,17 +593,23 @@ export function computeDcf(
     };
   }
 
+  // Debt/leases auto-sum (Phase 3.1 item 5): each of the 4 fields defaults
+  // to 0 when blank rather than blocking the DCF — plenty of companies
+  // genuinely have $0 in one or more of these buckets, and there's no reason
+  // to force a student to type a zero for something that isn't there.
+  const totalDebtAndLeases =
+    (short_term_debt ?? 0) + (long_term_debt ?? 0) + (short_term_lease ?? 0) + (long_term_lease ?? 0);
+
   if (
     !isNum(growth_1_5) ||
     !isNum(growth_6_10) ||
     !isNum(terminal_growth) ||
     !isNum(diluted_shares) ||
     !isNum(cash_and_st_investments) ||
-    !isNum(total_debt_and_leases) ||
+    diluted_shares <= 0 ||
     !isNum(risk_free_rate) ||
     !isNum(market_risk_premium) ||
     !isNum(beta) ||
-    diluted_shares <= 0 ||
     !isNum(sharePrice) ||
     sharePrice <= 0
   ) {
@@ -492,7 +676,7 @@ export function computeDcf(
   const pvTerminalValue = terminalValue * terminalDiscountFactor;
   sumPv += pvTerminalValue;
 
-  const netDebt = total_debt_and_leases - cash_and_st_investments;
+  const netDebt = totalDebtAndLeases - cash_and_st_investments;
   const intrinsicValueTotal = sumPv - netDebt;
   const intrinsicValuePerShare = intrinsicValueTotal / diluted_shares;
   const marginOfSafety = (intrinsicValuePerShare - sharePrice) / sharePrice;
@@ -500,9 +684,8 @@ export function computeDcf(
   // Final overflow net. Extreme-but-typeable inputs (a 1e300 growth rate, a
   // share count of 1e-320, debt at the float ceiling) can push these past
   // what a double can hold, and NaN/Infinity must never render as a valuation
-  // or be written to valuation_summary — JSON.stringify turns both into
-  // `null`, which previously persisted the nonsense state
-  // { dcf_available: true, margin_of_safety: null, dcf_signal: "…" }.
+  // — JSON.stringify turns both into `null`, which previously persisted the
+  // nonsense state { dcf_available: true, margin_of_safety: null, … }.
   if (
     ![sumPv, terminalValue, intrinsicValueTotal, intrinsicValuePerShare, marginOfSafety].every(
       Number.isFinite
@@ -528,6 +711,7 @@ export function computeDcf(
     years,
     terminalValue,
     sumPv,
+    totalDebtAndLeases,
     netDebt,
     intrinsicValueTotal,
     intrinsicValuePerShare,
@@ -537,31 +721,73 @@ export function computeDcf(
 }
 
 // ---------------------------------------------------------------------------
-// Denormalized summary — persisted to evaluations.valuation_summary on every
-// autosave so the dashboard can render/sort the Valuation column without
-// recomputing a DCF. No "overall verdict" field (owner-locked decision).
+// Phase 3.1 item 7 — fixed-order valuation summary table. One row per model,
+// always in this order, regardless of which ones have enough inputs yet.
+// Models without sufficient inputs render as a dash row (never hidden).
+// No "computed value" here doubles as a margin-of-safety display anywhere —
+// the DCF row's value is intrinsic value per share, not MoS (owner-locked).
 // ---------------------------------------------------------------------------
 
-export type ValuationSummary = {
-  dcf_available: boolean;
-  margin_of_safety: number | null;
-  dcf_signal: Signal | null;
-  updated_at: string;
+export type ValuationSummaryRow = {
+  key: "dcf" | "pb" | "dividend" | "pe" | "pocf";
+  label: string;
+  /** Pre-formatted display value (e.g. "$258.34" or "6.2x"), or null if not yet computable. */
+  value: string | null;
+  signal: Signal | null;
 };
 
-export function computeValuationSummary(dcf: DcfResult, now: Date = new Date()): ValuationSummary {
-  if (dcf.available) {
-    return {
-      dcf_available: true,
-      margin_of_safety: dcf.marginOfSafety,
-      dcf_signal: dcf.signal,
-      updated_at: now.toISOString(),
-    };
-  }
+export function buildValuationSummaryRows(
+  dcf: DcfResult,
+  entryModels: EntryModelsResult
+): ValuationSummaryRow[] {
+  return [
+    {
+      key: "dcf",
+      label: "DCF",
+      value: dcf.available ? `$${dcf.intrinsicValuePerShare.toFixed(2)}` : null,
+      signal: dcf.available ? dcf.signal : null,
+    },
+    {
+      key: "pb",
+      label: "P/B",
+      value: entryModels.pb.entryPrice != null ? `$${entryModels.pb.entryPrice.toFixed(2)}` : null,
+      signal: entryModels.pb.signal,
+    },
+    {
+      key: "dividend",
+      label: "Dividend",
+      value: entryModels.dividend.entryPrice != null ? `$${entryModels.dividend.entryPrice.toFixed(2)}` : null,
+      signal: entryModels.dividend.signal,
+    },
+    {
+      key: "pe",
+      label: "P/E",
+      value: entryModels.pe.entryPrice != null ? `$${entryModels.pe.entryPrice.toFixed(2)}` : null,
+      signal: entryModels.pe.signal,
+    },
+    {
+      key: "pocf",
+      label: "P/OCF",
+      value: entryModels.pocf.entryPrice != null ? `$${entryModels.pocf.entryPrice.toFixed(2)}` : null,
+      signal: entryModels.pocf.signal,
+    },
+  ];
+}
+
+/** Phase 3.1 item 8 — dashboard badge input: count of models signaling Undervalued out of models with sufficient inputs to signal at all. DCF + the 4 entry models = up to 5; PEG is informational-only and excluded (owner-locked, never a voting signal). */
+export type ValuationBadgeCounts = { undervalued: number; total: number };
+
+export function countUndervaluedModels(dcf: DcfResult, entryModels: EntryModelsResult): ValuationBadgeCounts {
+  const signals: (Signal | null)[] = [
+    dcf.available ? dcf.signal : null,
+    entryModels.pb.signal,
+    entryModels.dividend.signal,
+    entryModels.pe.signal,
+    entryModels.pocf.signal,
+  ];
+  const withSignal = signals.filter((s): s is Signal => s !== null);
   return {
-    dcf_available: false,
-    margin_of_safety: null,
-    dcf_signal: null,
-    updated_at: now.toISOString(),
+    undervalued: withSignal.filter((s) => s === "Undervalued").length,
+    total: withSignal.length,
   };
 }

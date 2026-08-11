@@ -4,8 +4,19 @@ import { hasCurrentMonthAccess, isAdmin } from "@/lib/access";
 import { getPublishedFramework } from "@/lib/framework";
 import { getTickerInfo } from "@/lib/ticker";
 import { EvaluationForm } from "@/components/evaluation-form";
+import { ValuationSection } from "@/components/valuation-form";
+import { legacyDebtTotal, normalizeValuationInputs } from "@/lib/valuation";
 import type { EvaluationInputs } from "@/lib/scoring";
 
+// Phase 3.1 item 1 — one page per ticker. Scoring sections render on top,
+// the valuation section renders below, on the same page/route. There is no
+// separate valuation route/step anymore (the old route now just redirects
+// here — see the sibling valuation/page.tsx).
+//
+// Phase 3.1 item 2 — valuation is always reachable: this page creates (or
+// loads) the evaluation row regardless of scoring status, and the valuation
+// section below never checks score completeness or verdict. A brand-new
+// draft with zero answers, or a completed FAIL, can both be valued.
 export default async function EvaluationPage({
   params,
 }: {
@@ -96,29 +107,47 @@ export default async function EvaluationPage({
     return <ErrorState message="Couldn't load this evaluation." ticker={ticker} />;
   }
 
+  const sharePrice = evaluation.share_price != null ? Number(evaluation.share_price) : null;
+
   return (
-    <EvaluationForm
-      evaluation={{
-        id: evaluation.id,
-        ticker: evaluation.ticker,
-        companyName: evaluation.company_name ?? evaluation.ticker,
-        sharePrice: evaluation.share_price != null ? Number(evaluation.share_price) : null,
-        inputs: (evaluation.inputs ?? {}) as EvaluationInputs,
-        createdAt: evaluation.created_at,
-        status: (evaluation.status as "draft" | "complete") ?? "draft",
-      }}
-      framework={framework.definition}
-    />
+    <div className="space-y-10">
+      <EvaluationForm
+        evaluation={{
+          id: evaluation.id,
+          ticker: evaluation.ticker,
+          companyName: evaluation.company_name ?? evaluation.ticker,
+          sharePrice,
+          inputs: (evaluation.inputs ?? {}) as EvaluationInputs,
+          createdAt: evaluation.created_at,
+          status: (evaluation.status as "draft" | "complete") ?? "draft",
+        }}
+        framework={framework.definition}
+      />
+
+      <div id="valuation">
+        <ValuationSection
+          evaluation={{
+            id: evaluation.id,
+            ticker: evaluation.ticker,
+            companyName: evaluation.company_name ?? evaluation.ticker,
+            sharePrice,
+            inputs: normalizeValuationInputs(evaluation.valuation_inputs),
+          }}
+          valuationConfig={framework.definition.valuation_config}
+          legacyDebtTotal={legacyDebtTotal(evaluation.valuation_inputs)}
+        />
+      </div>
+    </div>
   );
 }
 
 function ErrorState({ message, ticker }: { message: string; ticker?: string }) {
   return (
-    <div className="mx-auto max-w-md rounded-xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+    <div className="mx-auto max-w-md rounded-xl border border-subtle bg-surface p-8 text-center shadow-sm">
       <h1 className="font-serif text-lg text-foreground">
         {ticker ? `Couldn't load ${ticker}` : "Couldn't load evaluation"}
       </h1>
-      <p className="mt-2 text-sm text-slate-500">{message}</p>
+      <p className="mt-2 text-sm text-secondary">{message}</p>
       <a
         href="/dashboard"
         className="mt-6 inline-block rounded-md bg-brand px-4 py-2 text-sm font-medium text-accent transition hover:bg-brand-dark"

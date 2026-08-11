@@ -2,6 +2,13 @@ import { createClient } from "@/lib/supabase/server";
 import { getPublishedFramework } from "@/lib/framework";
 import { TickerQuickInput } from "@/components/ticker-quick-input";
 import { EvaluationsTable, type EvaluationRow } from "@/components/evaluations-table";
+import {
+  computeDcf,
+  computeEntryModels,
+  countUndervaluedModels,
+  normalizeValuationInputs,
+  resolveValuationConfig,
+} from "@/lib/valuation";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -12,17 +19,37 @@ export default async function DashboardPage() {
   const [{ data: evaluations }, framework] = await Promise.all([
     supabase
       .from("evaluations")
-      .select("id, ticker, company_name, final_score, verdict, status, updated_at, valuation_summary")
+      .select(
+        "id, ticker, company_name, final_score, verdict, status, updated_at, share_price, valuation_inputs"
+      )
       .order("updated_at", { ascending: false }),
     getPublishedFramework(supabase),
   ]);
 
+  // Phase 3.1 item 8 — the dashboard's Valuation column is a live-recomputed
+  // badge, never a stored verdict. `valuation_summary` is no longer read or
+  // written anywhere in the app (deprecated column, drop deferred to a later
+  // cleanup). Every row's models are recomputed here from `valuation_inputs`
+  // + the evaluation's own cached `share_price` (refreshed via Finnhub's 24h
+  // cache each time the student opens that evaluation) using the current
+  // published framework's `valuation_config` — every evaluation on this
+  // dashboard was scored under framework v1, the only version that has ever
+  // existed, so this doesn't yet hit the framework-version-divergence issue
+  // flagged for Phase 5 in CLAUDE.md.
+  const valuationConfig = resolveValuationConfig(framework?.definition.valuation_config);
+
   const rows: EvaluationRow[] = (evaluations ?? []).map((row) => {
-    const summary = row.valuation_summary as
-      | { dcf_available?: boolean; margin_of_safety?: number | null }
-      | null;
-    const marginOfSafety =
-      summary?.dcf_available && summary.margin_of_safety != null ? Number(summary.margin_of_safety) : null;
+    const sharePrice = row.share_price != null ? Number(row.share_price) : null;
+    const inputs = normalizeValuationInputs(row.valuation_inputs);
+    const dcf = computeDcf(inputs.dcf, sharePrice, valuationConfig);
+    const entryModels = computeEntryModels(
+      inputs.entry_models,
+      inputs.company_financials,
+      sharePrice,
+      inputs.dcf.diluted_shares,
+      valuationConfig
+    );
+    const counts = countUndervaluedModels(dcf, entryModels);
 
     return {
       id: row.id,
@@ -32,7 +59,7 @@ export default async function DashboardPage() {
       verdict: (row.verdict as "PASS" | "FAIL" | null) ?? null,
       status: row.status,
       updatedAt: row.updated_at,
-      marginOfSafety,
+      valuationBadge: counts.total > 0 ? counts : null,
     };
   });
 
@@ -47,7 +74,7 @@ export default async function DashboardPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="font-serif text-2xl text-foreground">Hi, {greetingName}</h1>
-          <p className="mt-1 text-sm text-slate-500">Your FRIEDD SNAKE evaluations.</p>
+          <p className="mt-1 text-sm text-secondary">Your FRIEDD SNAKE evaluations.</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <TickerQuickInput />
@@ -56,7 +83,7 @@ export default async function DashboardPage() {
               href={framework.definition.equity_scope_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="whitespace-nowrap rounded-md border border-brand px-4 py-2 text-sm font-medium text-brand transition hover:bg-brand hover:text-accent"
+              className="whitespace-nowrap rounded-md border border-brand px-4 py-2 text-sm font-medium text-brand transition hover:bg-brand hover:text-accent dark:border-accent dark:text-accent dark:hover:bg-accent dark:hover:text-brand"
             >
               Equity Scope ↗
             </a>
@@ -66,8 +93,8 @@ export default async function DashboardPage() {
 
       <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard label="Companies evaluated" value={companiesEvaluated} />
-        <StatCard label="Passed (≥ 7.0)" value={passedCount} accent="text-emerald-600" />
-        <StatCard label="Drafts" value={draftCount} accent="text-amber-600" />
+        <StatCard label="Passed (≥ 7.0)" value={passedCount} accent="text-emerald-600 dark:text-emerald-400" />
+        <StatCard label="Drafts" value={draftCount} accent="text-amber-600 dark:text-amber-400" />
       </div>
 
       <div className="mt-8">{rows.length === 0 ? <EmptyState /> : <EvaluationsTable rows={rows} />}</div>
@@ -77,18 +104,18 @@ export default async function DashboardPage() {
 
 function StatCard({ label, value, accent }: { label: string; value: number; accent?: string }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
-      <p className={`mt-2 text-3xl font-bold ${accent ?? "text-slate-900"}`}>{value}</p>
+    <div className="rounded-xl border border-subtle bg-surface p-5 shadow-sm">
+      <p className="text-xs font-medium uppercase tracking-wide text-secondary">{label}</p>
+      <p className={`mt-2 text-3xl font-bold ${accent ?? "text-foreground"}`}>{value}</p>
     </div>
   );
 }
 
 function EmptyState() {
   return (
-    <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center">
+    <div className="rounded-xl border border-dashed border-subtle bg-surface p-10 text-center">
       <h2 className="font-serif text-lg text-foreground">Run your first evaluation</h2>
-      <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
+      <p className="mx-auto mt-2 max-w-md text-sm text-secondary">
         FRIEDD SNAKE scores a company on financial health, moats, and risk in three simple steps.
       </p>
 
@@ -115,12 +142,12 @@ function EmptyState() {
 
 function Step({ number, title, description }: { number: number; title: string; description: string }) {
   return (
-    <li className="rounded-lg border border-slate-200 p-4">
+    <li className="rounded-lg border border-subtle p-4">
       <span className="flex h-6 w-6 items-center justify-center rounded-full bg-brand text-xs font-bold text-accent">
         {number}
       </span>
-      <p className="mt-2 font-medium text-slate-900">{title}</p>
-      <p className="mt-1 text-xs text-slate-500">{description}</p>
+      <p className="mt-2 font-medium text-foreground">{title}</p>
+      <p className="mt-1 text-xs text-secondary">{description}</p>
     </li>
   );
 }

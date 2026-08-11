@@ -69,10 +69,64 @@ Vercel. No manual deploy step.
      `framework_version` — these will silently diverge once framework v2 is
      published. Must be resolved in Phase 5.
 
-  **Owner checkpoint: IN PROGRESS.** Owner said "ok, some changes" but has not
-  yet given the actual change list. **Next session: ask him for his Phase 3
-  feedback (including the flagged items above) before building anything
-  new** — do not start Phase 4 or guess at what he wants changed.
+  **Owner checkpoint: superseded by Phase 3.1 below** — the owner's "ok, some
+  changes" turned into the 15-item Phase 3.1 rework brief, which addresses
+  flagged items 1-4 directly (2: gate relaxed; 3: gone, evaluation always has
+  a score record now that scoring+valuation are one page; 4: soft warnings
+  added). Items 5 (MarketWatch link) and 6 (framework-version divergence,
+  deferred to Phase 5) are still open.
+- **Phase 3.1 — valuation + evaluation-page rework: BUILT, pending owner
+  review and migration application.** Owner-approved 15-item brief covering:
+  merged evaluation+valuation into one page per ticker (old
+  `/evaluation/[ticker]/valuation` route now redirects there); valuation
+  gate fully relaxed (reachable on a zero-answer draft or a FAIL, no
+  scoring-status check anywhere); non-blocking negative-FCF teaching note
+  (DCF inputs are never disabled/greyed, only the DCF output area swaps to
+  the note); model-fit tooltips on every valuation-summary row; debt input
+  split into 4 fields (short/long-term debt, short/long-term lease,
+  auto-summed) with migrate-on-read for old single-total rows; Projected FCF
+  table now collapsible (collapsed by default); Valuation Summary rebuilt as
+  one fixed-order table (DCF, P/B, Dividend, P/E, P/OCF) with no headline DCF
+  treatment and Margin of Safety removed from every display surface (still
+  computed internally to band the DCF's own signal); dashboard Valuation
+  column replaced with a live-recomputed "UV x/y" badge (dashboard reads are
+  documented as sharing the published framework's `valuation_config` across
+  every row — the framework-version-divergence issue below is unaffected
+  since only framework v1 has ever existed); P/B, P/E and P/OCF became "5Y
+  average multiple" models (5 yearly inputs -> average, vs. a derived current
+  multiple) instead of the old avg-ratio-vs-share-price shape; P/OCF's
+  `ocf_per_share` input replaced with total OCF ($M), OCF/share now derived
+  from diluted shares (reused from the DCF section, resolving Phase 3 flagged
+  item 1); CAGR helper input order flipped (latest/TTM FCF first) plus a
+  "count the gaps" guideline and a years-out-of-range soft warning; SNAKE
+  section split into two separately-rendered tables (Risks, Economic Moats)
+  under a renamed "Qualitative Analysis" heading, FRIEDD+Others renamed
+  "Quantitative Analysis" — original acronyms kept as small muted sub-labels,
+  scoring criterion keys untouched; app-wide dark mode toggle (header,
+  localStorage-persisted, no-flash init script in `src/app/layout.tsx`).
+  Spec: `docs/phase3-valuation-spec.md` (Phase 3.1 addendum at the top, DCF
+  math/GOOGL worked example unchanged).
+  - **Migration `0008_generic_section_titles.sql`: written, NOT yet
+    applied** (no DB access in this build session — no `SUPABASE_DB_PASSWORD`).
+    Guarded the same way as 0004/0005: checks the current `display.groups`
+    really is the pre-3.1 shape before overwriting, so a hand-edited or
+    already-different `display` block makes it a no-op. Run
+    `npm run db-migrate` once real credentials are available.
+  - **`evaluations.valuation_summary` is now fully deprecated.** No code
+    reads or writes it anymore — every valuation signal (the page, the
+    dashboard badge) recomputes live from `valuation_inputs` +
+    `share_price`. The column itself is still in the schema; dropping it is
+    a deferred cleanup, not done in this migration.
+  - `npm run verify-valuation` was updated for the new entry-model
+    shapes (yearly-multiple arrays, `ocf_total` instead of
+    `ocf_per_share`, 4-field debt) and to drop the removed
+    `computeValuationSummary` assertions — the GOOGL DCF numbers
+    (discount rate, Year 1 FCF/PV, sum of PV, net debt, intrinsic
+    value/share $258.34) are byte-identical to the Phase 3 golden test.
+  - **Not yet owner-reviewed:** the tooltip copy (5 models) and all new
+    student-facing microcopy (negative-FCF note, 4 soft warnings, CAGR
+    guideline) need an owner pass before this goes live — see the Phase 3.1
+    build session's report for the full copy.
 - **Phase 4** — Portfolio plan. Not started.
 - **Phase 5** — Admin panel: framework editor (for `framework_versions`) + access-code
   rotation UI (replacing the current CLI/SQL-only flow). Not started.

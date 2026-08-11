@@ -50,15 +50,33 @@ export type ScoringConfig = {
  * Never consulted by computeScore/sanitizeInputs — scoring always iterates
  * `definition.sections` directly, so grouping can change without touching
  * how any evaluation is scored.
+ *
+ * Phase 3.1 item 13/14: a group now renders as one page-level heading (the
+ * generic label, e.g. "Quantitative Analysis") with the original acronym
+ * kept as a small, muted sub-label (`subtitle`, e.g. "F.R.I.E.D.D"), and one
+ * or more separately-rendered `tables` underneath. A group with one table
+ * (Quantitative Analysis: F.R.I.E.D.D + Others, merged) renders as a single
+ * card; a group with two tables (Qualitative Analysis: Risks, Economic
+ * Moats) renders as two separately-boxed tables under the shared heading —
+ * this is what makes Risks and Moats "two separately-rendered tables"
+ * instead of two subsections sharing one table.
  */
+export type FrameworkDisplayTable = {
+  key: string;
+  /** null = no sub-heading for this table (used when a group has exactly one table, e.g. the merged Quantitative table). */
+  title: string | null;
+  /** Section keys (from `definition.sections`) that belong to this table, in display order. */
+  section_keys: string[];
+  /** true = render this table's sections as one flat criteria list with no per-section subheading. */
+  merge_sections: boolean;
+};
+
 export type FrameworkDisplayGroup = {
   key: string;
   title: string;
+  /** Small, muted sub-label under the main heading — carries the original acronym (e.g. "F.R.I.E.D.D", "SNAKE"). */
   subtitle?: string | null;
-  /** Section keys (from `definition.sections`) that belong to this group, in display order. */
-  section_keys: string[];
-  /** true = render the group's sections as one flat criteria list with no per-section subheading. */
-  merge_sections: boolean;
+  tables: FrameworkDisplayTable[];
   /** Optional link-out copy shown in the group header (e.g. an Equity Scope prompt). */
   equity_scope_note?: string | null;
 };

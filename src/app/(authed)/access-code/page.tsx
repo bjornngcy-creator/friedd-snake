@@ -25,11 +25,11 @@ export default async function AccessCodePage() {
   }
 
   return (
-    <div className="mx-auto max-w-sm rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
+    <div className="mx-auto max-w-sm rounded-xl border border-subtle bg-surface p-8 shadow-sm">
       <h1 className="font-serif text-2xl text-foreground">
         Enter this month&apos;s access code
       </h1>
-      <p className="mt-1 text-sm text-slate-500">
+      <p className="mt-1 text-sm text-secondary">
         Your access code rotates monthly. Check your community channel for
         the current one.
       </p>

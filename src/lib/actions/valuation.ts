@@ -1,28 +1,26 @@
 "use server";
 
-import type { FrameworkDefinition } from "@/lib/scoring";
-import {
-  computeDcf,
-  computeValuationSummary,
-  normalizeValuationInputs,
-  resolveValuationConfig,
-  type ValuationInputs,
-  type ValuationSummary,
-} from "@/lib/valuation";
+import { normalizeValuationInputs, type ValuationInputs } from "@/lib/valuation";
 import { requireEvaluationAccess } from "@/lib/require-evaluation-access";
 
-export type SaveValuationResult =
-  | { ok: true; summary: ValuationSummary }
-  | { ok: false; error: string };
+export type SaveValuationResult = { ok: true } | { ok: false; error: string };
 
 /**
- * Autosave endpoint for the valuation form — same shape as
- * saveEvaluationInputs in src/lib/actions/evaluation.ts. Recomputes
- * valuation_summary server-side via src/lib/valuation.ts (never trusts a
- * client-sent summary) using the evaluation's own share price and the
- * valuation_config from the framework version that evaluation was scored
- * under, then persists both valuation_inputs (raw, source of truth) and
- * valuation_summary (denormalized, dashboard-facing) in one update.
+ * Autosave endpoint for the valuation section — same shape as
+ * saveEvaluationInputs in src/lib/actions/evaluation.ts. Phase 3.1: this no
+ * longer computes or persists `valuation_summary`. Every valuation
+ * signal/verdict is now recomputed live wherever it's needed (the merged
+ * evaluation+valuation page, the dashboard badge) straight from
+ * `valuation_inputs` + the evaluation's cached share price — nothing
+ * verdict-shaped is ever stored, so there's nothing to go stale when the
+ * share price refreshes. `valuation_summary` stays in the schema
+ * (dropping the column is a deferred cleanup) but nothing reads or writes
+ * it anymore.
+ *
+ * Phase 3.1 item 2: this action never checks the evaluation's scoring
+ * status — valuation autosaves the same way on a zero-answer draft, a FAIL,
+ * or a PASS. The only gate is the shared monthly-access check in
+ * requireEvaluationAccess.
  */
 export async function saveValuationInputs(
   evaluationId: string,
@@ -34,7 +32,7 @@ export async function saveValuationInputs(
 
   const { data: evaluation } = await supabase
     .from("evaluations")
-    .select("id, framework_version, share_price")
+    .select("id")
     .eq("id", evaluationId)
     .eq("user_id", userId)
     .maybeSingle();
@@ -43,33 +41,15 @@ export async function saveValuationInputs(
     return { ok: false, error: "Evaluation not found." };
   }
 
-  const { data: frameworkRow } = await supabase
-    .from("framework_versions")
-    .select("definition")
-    .eq("version", evaluation.framework_version)
-    .maybeSingle();
-
-  if (!frameworkRow) {
-    return { ok: false, error: "Framework definition not found." };
-  }
-
-  const framework = frameworkRow.definition as FrameworkDefinition;
-  const config = resolveValuationConfig(framework.valuation_config);
-
   // `rawInputs` comes straight off the client — normalize it into the known
-  // shape before persisting or computing anything from it (same
-  // "never trust the client" posture as sanitizeInputs for scoring).
+  // shape before persisting anything (same "never trust the client" posture
+  // as sanitizeInputs for scoring).
   const cleanInputs: ValuationInputs = normalizeValuationInputs(rawInputs);
-
-  const sharePrice = evaluation.share_price != null ? Number(evaluation.share_price) : null;
-  const dcf = computeDcf(cleanInputs.dcf, sharePrice, config);
-  const summary = computeValuationSummary(dcf);
 
   const { error } = await supabase
     .from("evaluations")
     .update({
       valuation_inputs: cleanInputs,
-      valuation_summary: summary,
       updated_at: new Date().toISOString(),
     })
     .eq("id", evaluationId)
@@ -79,5 +59,5 @@ export async function saveValuationInputs(
     return { ok: false, error: error.message };
   }
 
-  return { ok: true, summary };
+  return { ok: true };
 }

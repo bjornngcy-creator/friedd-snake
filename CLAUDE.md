@@ -232,6 +232,14 @@ Vercel. No manual deploy step.
   4. Entry-price model cards in the same grid row stretch to equal height
      (CSS grid default), leaving dead space in the shorter card (e.g. P/E
      next to a taller sibling) — logged 2026-08-11, not fixed.
+  5. `NumberField`'s bottom-anchored input (the Phase 3.2b debt-grid
+     alignment fix) misaligns inputs in rows with MIXED helper content
+     instead — e.g. the CAGR helper row ("Number of years" has no source
+     link, so its input sits one helper-line lower than the FCF fields)
+     and the Cash Flow & Growth row. Inverted, smaller residual of the fix
+     (QA finding, 2026-08-11). Suggested fix: reserve the helper line
+     (min-height on the helper slot even when empty) so both label-wrap
+     and helper-presence differences are absorbed. Not fixed.
   - **Not a bug, do not "fix":** the owner confirmed (2026-08-11) that the
     "FRIEDD SNAKE EVALUATOR" branding in the nav bar, browser tab title,
     and dashboard subtitle is intentional. A future session should not

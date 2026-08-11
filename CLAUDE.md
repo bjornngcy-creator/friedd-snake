@@ -9,8 +9,9 @@ Finnhub dashboards.
 A stock-evaluation web tool for ~150 Invest With Bjorn / BPC students. Core loop:
 student signs up, unlocks the month with an access code, picks a ticker, and scores
 it against the **FRIEDD SNAKE** framework (F.R.I.E.D.D financial health, Others,
-SNAKE Risks, Moats — see `docs/framework-spec.md`). Phase 3 (in progress) adds a
-valuation module on top of a completed evaluation (see `docs/phase3-valuation-spec.md`).
+SNAKE Risks, Moats — see `docs/framework-spec.md`). Phase 3 adds a valuation
+module on top of a completed evaluation (see `docs/phase3-valuation-spec.md`);
+it's built and live, pending owner feedback (see Phase status).
 
 The scoring framework itself is not hardcoded in components — it's versioned data in
 the `framework_versions` table, and the evaluation form renders from that JSON
@@ -34,19 +35,33 @@ Vercel. No manual deploy step.
 
 - **Phase 1 — Auth + monthly access-code gate: DONE, live, owner-approved.**
 - **Phase 2 — FRIEDD SNAKE scoring + dashboard: DONE, live, owner-approved.**
-- **Phase 3 — Valuation (next up).** Spec: `docs/phase3-valuation-spec.md`. Locked
-  decisions from the owner:
+- **Phase 3 — Valuation: BUILT, VERIFIED, LIVE as of 2026-08-11.** Spec:
+  `docs/phase3-valuation-spec.md`. Migrations `0006_valuation_columns.sql` and
+  `0007_valuation_config.sql` applied to remote. Acceptance tests exact — GOOGL
+  intrinsic value/share $258.34, margin of safety -27.08% — reproduced by
+  `scripts/verify-valuation.mjs` (`npm run verify-valuation`), the Phase 3 golden
+  test alongside `scripts/verify-scoring.mjs`. Locked decisions from the owner:
   - **No overall verdict.** Show per-model signals only, not a single blended
     pass/fail or buy/sell call.
   - **PEG is informational only** — displayed, never gates or scores anything.
   - **Dashboard valuation column** = a sortable margin-of-safety percentage (replaces
-    the current `—` placeholder).
-- **Phase 4** — Portfolio plan.
+    the old `—` placeholder).
+
+  **QA sweep:** an adversarial QA sweep of Phase 3 (edge inputs, Gordon Growth
+  guard, mobile, RLS) was launched 2026-08-11. Its fixes, if any, land as
+  "Phase 3 QA fixes" commits — treat its findings as pending unless such a commit
+  exists in `git log`.
+
+  **Owner checkpoint: IN PROGRESS.** Owner said "ok, some changes" but has not
+  yet given the actual change list. **Next session: ask him for his Phase 3
+  feedback before building anything new** — do not start Phase 4 or guess at
+  what he wants changed.
+- **Phase 4** — Portfolio plan. Not started.
 - **Phase 5** — Admin panel: framework editor (for `framework_versions`) + access-code
-  rotation UI (replacing the current CLI/SQL-only flow).
-- **Phase 6** — Polish + launch. **Critical launch blocker:** rotate the access code
-  off the dev seed `WELCOME2026` before students get the link (see
-  `scripts/set-access-code.mjs` in README).
+  rotation UI (replacing the current CLI/SQL-only flow). Not started.
+- **Phase 6** — Polish + launch. Not started. **Critical launch blocker:** rotate
+  the access code off the dev seed `WELCOME2026` (still the live code) before
+  students get the link (see `scripts/set-access-code.mjs` in README).
 
 ## Technical facts worth knowing before touching anything
 
@@ -109,4 +124,5 @@ real values come from the owner or the Supabase / Finnhub dashboards:
 - `docs/SETUP.md` — new-machine setup instructions for the owner (non-developer).
 - `README.md` — human-facing setup + operations doc (Supabase setup, running
   migrations, setting the monthly access code, running locally).
-- `scripts/` — `db-migrate.mjs`, `set-access-code.mjs`, `verify-scoring.mjs`.
+- `scripts/` — `db-migrate.mjs`, `set-access-code.mjs`, `verify-scoring.mjs`,
+  `verify-valuation.mjs`.

@@ -3,15 +3,17 @@
 Phase 1: scaffold, auth, and the monthly access-code gate. Phase 2: the
 FRIEDD SNAKE evaluation tool itself (the app's name is Equity Compass,
 subtitled "FRIEDD SNAKE Evaluator"; FRIEDD SNAKE is the name of the scoring
-framework it implements). Built for ~150 Invest With Bjorn students. This
-README is written for the owner, not a developer — follow it top to bottom
-the first time you set this up.
+framework it implements). Phase 3: the valuation module, built, verified, and
+live as of 2026-08-11 (owner feedback pending — see `CLAUDE.md` Phase status).
+Built for ~150 Invest With Bjorn students. This README is written for the
+owner, not a developer — follow it top to bottom the first time you set this
+up.
 
 Setting up on a brand-new computer? Use `docs/SETUP.md` for the short version.
 This README covers the full picture, including Supabase setup and monthly
 operations. `docs/framework-spec.md` is the full FRIEDD SNAKE scoring spec;
-`docs/phase3-valuation-spec.md` is the build spec for the upcoming valuation
-module. `CLAUDE.md` is the brief for Claude Code sessions working on this repo.
+`docs/phase3-valuation-spec.md` is the build spec for the valuation module.
+`CLAUDE.md` is the brief for Claude Code sessions working on this repo.
 
 ## 1. Create the Supabase project
 

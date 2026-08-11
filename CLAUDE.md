@@ -44,6 +44,14 @@ Vercel. No manual deploy step.
   - **No overall verdict.** Show per-model signals only, not a single blended
     pass/fail or buy/sell call.
   - **PEG is informational only** — displayed, never gates or scores anything.
+    **Amended 2026-08-11 (Phase 3.2b):** PEG now shows a soft
+    Undervalued/Fair Value/Overvalued signal too, as the LAST row of the
+    valuation summary table (reusing `computePegVerdict`'s existing
+    thresholds unchanged: < 1 leans undervalued, > 1 leans overvalued, ==
+    1 fair value, null when nothing's entered). Still never gates or
+    combines with anything — it's excluded from `countUndervaluedModels`
+    (the dashboard badge) exactly as before; only the summary table grew a
+    row.
   - **Dashboard valuation column** = a sortable margin-of-safety percentage (replaces
     the old `—` placeholder).
 
@@ -176,6 +184,36 @@ Vercel. No manual deploy step.
   needed. Known accepted quirks: single-value messy pastes (e.g. `$1,000`
   alone) fall to native paste and are rejected by the number input;
   European-style `12,5` decimals parse as two values.
+- **Phase 3.2b — PEG row + two alignment fixes: BUILT (owner-approved
+  mini-round, 2026-08-11).**
+  1. **PEG row appended to the valuation summary table** (LAST row, after
+     P/OCF) — reuses `computePegVerdict` unchanged (see the amended
+     locked-decision note above), value = the raw ratio to 2dp, dash when
+     nothing's entered. `EntryModelsResult` gained a `pegRatio` field so
+     `buildValuationSummaryRows` has something to format; no other engine
+     change (`countUndervaluedModels` — the dashboard badge — still
+     excludes PEG).
+  2. **Debt & Leases input misalignment, fixed.** A CSS grid row stretches
+     every cell to its tallest sibling, but `NumberField`'s old top-down
+     block layout (label span, then input right below) didn't use that
+     extra height — a 2-line-wrapped label (e.g. "Short-term lease ($M)")
+     pushed its own input down while 1-line siblings' inputs stayed put.
+     `NumberField` (`src/components/valuation-form.tsx`) is now a flex
+     column with the input + helper-text anchored to the bottom via
+     `mt-auto`, so every input in a row lines up regardless of label
+     wrapping — fixed at the shared-component level, so it also covers any
+     other grid in the valuation section with mixed label lengths, not
+     just Debt & Leases.
+  3. **Scoring-criteria answer-button placement, fixed** (owner addendum
+     to the same round). `CriterionRow` (`src/components/evaluation-form.tsx`)
+     used `flex flex-wrap justify-between`, so a criterion with few/short
+     options (e.g. Dividends' 2-button set) rendered its answer buttons to
+     the RIGHT of the label block, while a criterion with more/longer
+     options (EPS Trend, Debt/Equity) wrapped them BELOW it — same
+     component, two different layouts depending on option length and
+     viewport width. Now `flex-col`: answer buttons always render on their
+     own full-width row below the label/description/source-link block, for
+     every criterion at every width.
 - **Phase 3.3 — visual backlog (logged 2026-08-11, NOT started; owner wants
   these eventually, not urgent):**
   1. At narrow window widths the valuation summary disappears entirely —

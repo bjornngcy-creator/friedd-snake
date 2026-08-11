@@ -383,9 +383,18 @@ function CriterionRow({
   const sourceUrl = resolveSourceUrl(criterion.source, ticker);
   const answered = value !== undefined && value !== null;
 
+  // Phase 3.2b item 3 — this used to be `flex flex-wrap items-start
+  // justify-between`: a criterion with few/short options (e.g. Dividends'
+  // 2-button "No"/"Dividend paid" set) fit next to the label block and
+  // rendered to its RIGHT, while a criterion with more/longer options (EPS
+  // Trend, Debt/Equity) overflowed the row and wrapped BELOW it — same
+  // component, two different layouts depending on option length and
+  // viewport width. `flex-col` makes the answer-button row unconditionally
+  // its own full-width block under the label, for every criterion at every
+  // width, matching the owner's screenshot request for consistent placement.
   return (
     <div className="py-4 first:pt-0 last:pb-0">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="flex flex-col gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span
@@ -417,7 +426,7 @@ function CriterionRow({
           ) : null}
         </div>
 
-        <div className="max-w-full shrink-0">
+        <div className="w-full">
           {criterion.input_type === "scale" ? (
             <ScaleInput criterion={criterion} value={value as number | null | undefined} onChange={onChange} />
           ) : (

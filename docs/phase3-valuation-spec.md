@@ -145,6 +145,23 @@
 >    is the model's answer" visual across DCF, P/B, Dividend, P/E, and
 >    P/OCF, legible in both themes. Nothing else was restyled.
 >
+> **Phase 3.2b addendum (2026-08-11) — mini-round, no engine/math change.**
+>
+> 1. **PEG joins the valuation summary table as its LAST row** (after
+>    P/OCF): value = the raw PEG ratio to 2dp, an info tooltip explaining
+>    what PEG is and roughly when it's useful, and — newly, owner-unlocked
+>    — a soft signal reusing §1.3's `peg_verdict` formula completely
+>    unchanged (< 1 Undervalued, > 1 Overvalued, == 1 Fair Value, dash when
+>    nothing's entered). PEG still isn't a voting signal anywhere (the
+>    dashboard's `countUndervaluedModels` still excludes it) — this only
+>    adds it to the summary display, per the amended locked-decision note
+>    in CLAUDE.md.
+> 2. **Two layout-only fixes**, no behavior change: the Debt & Leases
+>    inputs (and every other `NumberField` grid in this section) now stay
+>    top-aligned regardless of label wrapping, and the scoring page's
+>    criterion answer buttons always render below the label block instead
+>    of sometimes beside it. See CLAUDE.md's Phase 3.2b entry for detail.
+>
 > Everything from here down is the original Phase 3 spec text.
 
 Source of truth for the sheet's mechanics: `friedd-snake-framework-spec.md` (same scratchpad folder). This spec extends that document into a buildable Phase 3 feature — the valuation page that hangs off a FRIEDD SNAKE evaluation (Phase 2, in progress).

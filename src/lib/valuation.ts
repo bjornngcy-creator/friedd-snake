@@ -491,6 +491,13 @@ export type EntryModelsResult = {
   pe: MultipleModelResult;
   pocf: MultipleModelResult;
   pegVerdict: Signal | null;
+  /**
+   * Phase 3.2b — the raw PEG ratio the student entered, exposed alongside
+   * `pegVerdict` so the summary table's PEG row (`buildValuationSummaryRows`)
+   * has a value to display without re-reaching into `EntryModelInputs`.
+   * Null whenever `pegVerdict` is null too (not a number entered yet).
+   */
+  pegRatio: number | null;
   /** Derived OCF/share, exposed for the "show the math" formula display — null when total OCF or shares aren't in yet. */
   ocfPerShare: number | null;
 };
@@ -537,6 +544,7 @@ export function computeEntryModels(
       visibleCounts?.pocf
     ),
     pegVerdict: computePegVerdict(inputs.peg.peg_ratio),
+    pegRatio: isNum(inputs.peg.peg_ratio) ? inputs.peg.peg_ratio : null,
     ocfPerShare: ocfPerShare != null && Number.isFinite(ocfPerShare) ? ocfPerShare : null,
   };
 }
@@ -794,12 +802,20 @@ export function computeDcf(
 // Models without sufficient inputs render as a dash row (never hidden).
 // No "computed value" here doubles as a margin-of-safety display anywhere —
 // the DCF row's value is intrinsic value per share, not MoS (owner-locked).
+//
+// Phase 3.2b: PEG is appended as the LAST row (owner-approved 2026-08-11).
+// It reuses `computePegVerdict` unchanged (< 1 leans Undervalued, > 1 leans
+// Overvalued, == 1 Fair Value, null when no PEG ratio is entered) — same
+// thresholds and wording the standalone PEG card already used pre-3.2b, not
+// a new interpretation. PEG still gates nothing: it's excluded from
+// `countUndervaluedModels` (the dashboard badge) exactly as before, this
+// only adds it to the summary table's display.
 // ---------------------------------------------------------------------------
 
 export type ValuationSummaryRow = {
-  key: "dcf" | "pb" | "dividend" | "pe" | "pocf";
+  key: "dcf" | "pb" | "dividend" | "pe" | "pocf" | "peg";
   label: string;
-  /** Pre-formatted display value (e.g. "$258.34" or "6.2x"), or null if not yet computable. */
+  /** Pre-formatted display value (e.g. "$258.34", "6.2x", or "1.84" for PEG), or null if not yet computable. */
   value: string | null;
   signal: Signal | null;
 };
@@ -838,6 +854,12 @@ export function buildValuationSummaryRows(
       label: "P/OCF",
       value: entryModels.pocf.entryPrice != null ? `$${entryModels.pocf.entryPrice.toFixed(2)}` : null,
       signal: entryModels.pocf.signal,
+    },
+    {
+      key: "peg",
+      label: "PEG",
+      value: entryModels.pegRatio != null ? entryModels.pegRatio.toFixed(2) : null,
+      signal: entryModels.pegVerdict,
     },
   ];
 }

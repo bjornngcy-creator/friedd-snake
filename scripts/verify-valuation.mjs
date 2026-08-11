@@ -15,6 +15,7 @@
 
 import {
   averageYearly,
+  buildValuationSummaryRows,
   computeCagr,
   computeEntryModels,
   computeDcf,
@@ -386,6 +387,43 @@ const mixedVisibility = computeEntryModels(
 ok = assertClose(mixedVisibility.pb.avg5y, sixYearAvg, "computeEntryModels: PB visibleCounts.pb=6 averages all 6") && ok;
 ok = assertEqual(mixedVisibility.pe.avg5y, null, "computeEntryModels: PE visibleCounts.pe=6 with an empty 6th -> null") && ok;
 ok = assertClose(mixedVisibility.pocf.avg5y, 10, "computeEntryModels: POCF omitted from visibleCounts -> auto-detects 5-box average") && ok;
+
+// ---------------------------------------------------------------------------
+// Case 6: Phase 3.2b — PEG appended as the LAST row of the fixed-order
+// valuation summary table, reusing computePegVerdict's existing thresholds
+// unchanged (< 1 Undervalued, > 1 Overvalued, == 1 Fair Value, null when no
+// PEG ratio is entered). PEG still doesn't vote in countUndervaluedModels
+// (the dashboard badge) — only checked here that the summary row itself is
+// right, in the right position, with the right value/signal.
+// ---------------------------------------------------------------------------
+console.log("\n=== Phase 3.2b: PEG row in the valuation summary table ===");
+
+const googlSummaryRows = buildValuationSummaryRows(googlDcf, googlEntry);
+ok = assertEqual(googlSummaryRows.length, 6, "Summary table has 6 rows (DCF, P/B, Dividend, P/E, P/OCF, PEG)") && ok;
+ok = assertEqual(googlSummaryRows[5].key, "peg", "PEG is the LAST row") && ok;
+ok = assertEqual(googlSummaryRows[5].label, "PEG", "PEG row label") && ok;
+ok = assertEqual(googlSummaryRows[5].value, "1.84", "PEG row value = the raw ratio, 2dp, no unit") && ok;
+ok = assertEqual(googlSummaryRows[5].signal, "Overvalued", "PEG row signal matches computePegVerdict (1.84 > 1)") && ok;
+// Row order otherwise unchanged from Phase 3.1/3.2.
+ok =
+  assertEqual(
+    googlSummaryRows.map((r) => r.key).join(","),
+    "dcf,pb,dividend,pe,pocf,peg",
+    "Fixed row order, PEG appended at the end"
+  ) && ok;
+
+// No PEG ratio entered -> dash row (null value, null signal), never a
+// nonsense signal — same "not yet computed" treatment every other row gets.
+const noPegEntry = computeEntryModels(
+  { ...googlEntryInputs, peg: { peg_ratio: undefined } },
+  googlCompanyFinancials,
+  googlSharePrice,
+  googlDilutedShares,
+  DEFAULT_VALUATION_CONFIG
+);
+const noPegRows = buildValuationSummaryRows(googlDcf, noPegEntry);
+ok = assertEqual(noPegRows[5].value, null, "No PEG entered -> value null (dash in the UI)") && ok;
+ok = assertEqual(noPegRows[5].signal, null, "No PEG entered -> signal null (dash, never invented)") && ok;
 
 console.log(ok ? "\nAll assertions passed." : "\nSome assertions FAILED.");
 if (!ok) process.exit(1);

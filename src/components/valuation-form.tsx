@@ -116,6 +116,7 @@ const MODEL_TOOLTIPS: Record<ValuationSummaryRow["key"], string> = {
   dividend: "Best for mature dividend payers with a long, stable history of steady payouts. Not meaningful for companies that don't pay a dividend, or whose dividend is new or unpredictable.",
   pe: "Best for stable, mature, consistently profitable businesses with a long earnings track record. Misleading for companies with erratic, cyclical, or negative earnings.",
   pocf: "Best for capital-intensive or high-depreciation businesses, where accounting earnings understate the cash the business actually generates. A useful cross-check alongside P/E.",
+  peg: "PEG (Price/Earnings-to-Growth) adjusts the P/E for growth — useful for comparing growth stocks, where a high P/E alone can be misleading. Below 1 leans undervalued, above 1 leans expensive. Informational only — it never gates or combines with the other models.",
 };
 
 export function ValuationSection({
@@ -1317,44 +1318,55 @@ function NumberField({
   const displayValue =
     value == null ? "" : percent ? Number((value * 100).toFixed(10)) : value;
 
+  // Phase 3.2b item 2 — a CSS grid row stretches every cell to the height
+  // of its tallest sibling by default, but a plain top-down block layout
+  // (label span, then input right below it) doesn't USE that extra height:
+  // a field whose label wraps to 2 lines pushes its own input down, while a
+  // 1-line sibling's input stays put — same row, misaligned inputs. Making
+  // this a flex column and wrapping "input + helper text" in one `mt-auto`
+  // block anchors that whole unit to the BOTTOM of the (already-stretched)
+  // cell instead, so every input in a row lines up regardless of how many
+  // lines any sibling's label wraps to, at any width.
   return (
-    <label className="block">
+    <label className="flex h-full flex-col">
       <span className="text-xs font-medium text-secondary">{label}</span>
-      <input
-        type="number"
-        step="any"
-        inputMode="decimal"
-        value={displayValue}
-        onChange={(e) => {
-          const raw = e.target.value;
-          if (raw === "") {
-            onChange(undefined);
-            return;
-          }
-          const n = Number(raw);
-          if (!Number.isFinite(n)) return;
-          onChange(percent ? n / 100 : n);
-        }}
-        className={`mt-1 w-full rounded-md border px-3 py-2 text-sm text-foreground shadow-sm transition focus:outline-none focus:ring-1 ${
-          error
-            ? "border-red-300 bg-red-50 focus:border-red-400 focus:ring-red-400 dark:border-red-700/60 dark:bg-red-950/20"
-            : "border-amber-200 bg-[#fffdf2] focus:border-brand focus:ring-brand dark:border-amber-800/50 dark:bg-amber-950/20 dark:focus:border-accent dark:focus:ring-accent"
-        }`}
-      />
-      {error ? (
-        <p className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p>
-      ) : warning ? (
-        <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">{warning}</p>
-      ) : sourceUrl ? (
-        <a
-          href={sourceUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mt-1 inline-block text-xs text-tertiary underline decoration-dotted hover:text-brand dark:hover:text-accent"
-        >
-          {sourceLabel} ↗
-        </a>
-      ) : null}
+      <div className="mt-auto">
+        <input
+          type="number"
+          step="any"
+          inputMode="decimal"
+          value={displayValue}
+          onChange={(e) => {
+            const raw = e.target.value;
+            if (raw === "") {
+              onChange(undefined);
+              return;
+            }
+            const n = Number(raw);
+            if (!Number.isFinite(n)) return;
+            onChange(percent ? n / 100 : n);
+          }}
+          className={`mt-1 w-full rounded-md border px-3 py-2 text-sm text-foreground shadow-sm transition focus:outline-none focus:ring-1 ${
+            error
+              ? "border-red-300 bg-red-50 focus:border-red-400 focus:ring-red-400 dark:border-red-700/60 dark:bg-red-950/20"
+              : "border-amber-200 bg-[#fffdf2] focus:border-brand focus:ring-brand dark:border-amber-800/50 dark:bg-amber-950/20 dark:focus:border-accent dark:focus:ring-accent"
+          }`}
+        />
+        {error ? (
+          <p className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p>
+        ) : warning ? (
+          <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">{warning}</p>
+        ) : sourceUrl ? (
+          <a
+            href={sourceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-1 inline-block text-xs text-tertiary underline decoration-dotted hover:text-brand dark:hover:text-accent"
+          >
+            {sourceLabel} ↗
+          </a>
+        ) : null}
+      </div>
     </label>
   );
 }

@@ -214,14 +214,47 @@ Vercel. No manual deploy step.
      viewport width. Now `flex-col`: answer buttons always render on their
      own full-width row below the label/description/source-link block, for
      every criterion at every width.
-- **Phase 3.3 — visual backlog (logged 2026-08-11, NOT started; owner wants
-  these eventually, not urgent):**
+- **Phase 3.3 — visual backlog (logged 2026-08-11, NOT started unless noted;
+  owner wants these eventually, not urgent):**
   1. At narrow window widths the valuation summary disappears entirely —
-     it should remain reachable at every viewport width.
-  2. When the summary IS shown at narrow width, the 5-6 yearly-multiple
-     boxes get so tight the numbers are unreadable — needs a responsive
-     layout fix (wrap the boxes, or stack summary/inputs) so year values
-     stay legible with the summary visible.
+     it should remain reachable at every viewport width. Still open.
+  2. ~~When the summary IS shown at narrow width, the 5-6 yearly-multiple
+     boxes get so tight the numbers are unreadable~~ — **RESOLVED** by the
+     Phase 3.2b item 4 fix below (`YearlyInputs` now uses a fixed
+     `grid-cols-3` layout, wrapping 5-6 boxes onto two rows instead of
+     squeezing them into one). The fix was actually driven by a worse,
+     related bug at FULL desktop width, not this narrow-width report, but
+     it covers this case too — same component, same root cause (too many
+     equal-width columns for the available card width).
+  3. Source-link text under the yearly-multiple boxes (e.g. "Financials >
+     Ratios (5 fiscal years)") wraps awkwardly into the "+ add year"
+     control sharing that row — logged 2026-08-11, not fixed.
+  4. Entry-price model cards in the same grid row stretch to equal height
+     (CSS grid default), leaving dead space in the shorter card (e.g. P/E
+     next to a taller sibling) — logged 2026-08-11, not fixed.
+  - **Not a bug, do not "fix":** the owner confirmed (2026-08-11) that the
+    "FRIEDD SNAKE EVALUATOR" branding in the nav bar, browser tab title,
+    and dashboard subtitle is intentional. A future session should not
+    rename/remove it without being explicitly asked.
+- **Phase 3.2b item 4/5 — year-box clipping + entry-price label
+  consistency: BUILT (owner-approved, 2026-08-11, same mini-round as the
+  PEG summary row).**
+  4. **Year-box clipping, fixed.** `YearlyInputs`
+     (`src/components/valuation-form.tsx`) used `grid-cols-5`/`grid-cols-6`
+     — one column per box — inside a two-column, HALF-WIDTH card
+     (`EntryModelsGroup`'s `sm:grid-cols-2`). At full desktop width
+     (~1330px) that half-width card is still only ~600px, but a
+     viewport-width media query can't see that, so 5-6 equal columns
+     squeezed every box down to 1-2 visible characters (P/E showed
+     "2, 2, 1(, 1., 1:, 2"; P/OCF showed "23, 22, 18., 17.1, 12."). Now a
+     fixed `grid-cols-3` (never more, regardless of viewport) wraps 5 or 6
+     boxes onto two rows instead of shrinking them — every box keeps
+     roughly a third of the card's width at any size.
+  5. **Entry-price label consistency, fixed.** The Dividend Yield card's
+     `ImpliedPriceBox` passed `label="Entry price"` while P/B, P/E, and
+     P/OCF used the component's default, "Implied entry price" — now
+     Dividend uses the same default too. DCF's "Intrinsic value / share"
+     is intentionally different (per its own math) and is unchanged.
 - **Phase 4** — Portfolio plan. Not started.
 - **Phase 5** — Admin panel: framework editor (for `framework_versions`) + access-code
   rotation UI (replacing the current CLI/SQL-only flow). Not started.

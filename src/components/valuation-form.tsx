@@ -941,7 +941,20 @@ function YearlyInputs({
           {visibleCount}Y average — one ratio per year (paste a whole row to fill)
         </span>
       </div>
-      <div className={`mt-1 grid gap-1.5 ${visibleCount === 6 ? "grid-cols-6" : "grid-cols-5"}`}>
+      {/*
+        Phase 3.2b item 4 (the real bug) — this used to be `grid-cols-5`/
+        `grid-cols-6`, one column per box. That's fine in isolation, but
+        this card lives in a two-column, half-width grid (EntryModelsGroup's
+        `sm:grid-cols-2`) — at ~1330px *viewport* width the half-width CARD
+        is still only ~600px, yet a viewport-width media query has no way to
+        know that, so 5-6 equal columns squeezed each box down to 1-2
+        legible characters ("2, 2, 1(, 1., 1:, 2" instead of "24.90").
+        Fixed 3-column grid (never more, regardless of viewport) wraps 5 or
+        6 boxes onto two rows instead of shrinking them — every box keeps
+        roughly a third of the card's width, comfortably fitting "23.55" at
+        any width from 375px up, in a half-width card, with 6 boxes visible.
+      */}
+      <div className="mt-1 grid grid-cols-3 gap-1.5">
         {visibleYears.map((v, i) => (
           <input
             key={i}
@@ -958,7 +971,7 @@ function YearlyInputs({
               if (Number.isFinite(n)) onChange(i, n);
             }}
             onPaste={(e) => handlePaste(i, e)}
-            className="w-full rounded-md border border-amber-200 bg-[#fffdf2] px-1.5 py-1.5 text-center text-xs text-foreground shadow-sm transition focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand dark:border-amber-800/50 dark:bg-amber-950/20 dark:focus:border-accent dark:focus:ring-accent"
+            className="w-full min-w-0 rounded-md border border-amber-200 bg-[#fffdf2] px-1.5 py-1.5 text-center text-xs text-foreground shadow-sm transition focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand dark:border-amber-800/50 dark:bg-amber-950/20 dark:focus:border-accent dark:focus:ring-accent"
           />
         ))}
       </div>
@@ -1085,7 +1098,10 @@ function DividendModelCard({
       <p className="mt-3 text-xs text-secondary">
         Entry price = annual dividend ÷ 5% assumed yield = ${inputs.entry_models.dividend.annual_dividend ?? "—"} ÷ 0.05
       </p>
-      <ImpliedPriceBox label="Entry price" value={result.entryPrice} placeholder="Fill in the field above." />
+      {/* Phase 3.2b item 5 — unified to "Implied entry price" (was "Entry
+          price", the only card not matching P/B/P/E/P/OCF's label; DCF's
+          "Intrinsic value / share" is intentionally different and stays). */}
+      <ImpliedPriceBox value={result.entryPrice} placeholder="Fill in the field above." />
     </div>
   );
 }

@@ -14,9 +14,11 @@
 // persists it anymore, so there's nothing summary-shaped left to assert).
 
 import {
+  averageYearly,
   computeCagr,
   computeEntryModels,
   computeDcf,
+  computePbModel,
   DEFAULT_VALUATION_CONFIG,
 } from "../src/lib/valuation.ts";
 
@@ -320,6 +322,70 @@ const negativeEpsModels = computeEntryModels(
   DEFAULT_VALUATION_CONFIG
 );
 ok = assertEqual(negativeEpsModels.pe.entryPrice, null, "Negative EPS -> PE entry price null, not a negative dollar figure") && ok;
+
+// ---------------------------------------------------------------------------
+// Case 5: Phase 3.2 item 1 — the optional 6th yearly-average box.
+// `YearlyMultiple` is now 6 slots; `averageYearly`/the multiple-model
+// functions take an optional `visibleCount` (5 or 6). Omitted = auto-detect
+// from the data (slot 5 present -> 6, else -> 5) — what every non-live
+// caller (dashboard, this script) gets. Explicit 5|6 = what the live UI
+// passes, and is the only way to express "6th box is visible but empty"
+// (indistinguishable from "never added" at the data level alone).
+// ---------------------------------------------------------------------------
+console.log("\n=== Phase 3.2: optional 6th yearly-average box ===");
+
+const sixYearValues = [6.64, 6.5, 6.8, 6.2, 6.9, 6.3];
+const sixYearAvg = sixYearValues.reduce((a, b) => a + b, 0) / 6;
+const fiveYearAvg = sixYearValues.slice(0, 5).reduce((a, b) => a + b, 0) / 5;
+
+// 5.a averageYearly directly.
+ok = assertClose(averageYearly(sixYearValues, 6), sixYearAvg, "averageYearly: 6 values, visibleCount=6") && ok;
+ok = assertClose(averageYearly(sixYearValues, 5), fiveYearAvg, "averageYearly: same array, visibleCount=5 ignores the 6th") && ok;
+ok = assertClose(averageYearly(sixYearValues), sixYearAvg, "averageYearly: visibleCount omitted, 6th present -> auto-detects 6") && ok;
+ok =
+  assertClose(
+    averageYearly([6.64, 6.5, 6.8, 6.2, 6.9, undefined]),
+    fiveYearAvg,
+    "averageYearly: visibleCount omitted, 6th absent -> auto-detects 5"
+  ) && ok;
+ok =
+  assertEqual(
+    averageYearly([6.64, 6.5, 6.8, 6.2, 6.9, undefined], 6),
+    null,
+    "averageYearly: visibleCount=6 explicitly but 6th empty -> null (6th box visible-but-empty on the live UI)"
+  ) && ok;
+
+// 5.b Through the model function (computePbModel), which is what the UI/
+// dashboard actually call — same GOOGL BVPS/share price as Case 1.
+const sixYearFull = computePbModel(32.03, sixYearValues, 354.3, 6);
+ok = assertClose(sixYearFull.avg5y, sixYearAvg, "computePbModel: 6-box average (visibleCount=6, all 6 filled)") && ok;
+ok = assertClose(sixYearFull.entryPrice, 32.03 * sixYearAvg, "computePbModel: entry price uses the 6-box average") && ok;
+
+const sixYearPartial = computePbModel(32.03, [6.64, 6.5, 6.8, 6.2, 6.9, undefined], 354.3, 6);
+ok = assertEqual(sixYearPartial.avg5y, null, "computePbModel: 6th box visible-but-empty -> null average") && ok;
+ok = assertEqual(sixYearPartial.entryPrice, null, "computePbModel: 6th box visible-but-empty -> null entry price too") && ok;
+ok = assertEqual(sixYearPartial.signal, null, "computePbModel: 6th box visible-but-empty -> null signal") && ok;
+
+// 5.c computeEntryModels-level: visibleCounts are per-model and independent
+// — expanding P/B's 6th year doesn't affect P/E, and a model omitted from
+// visibleCounts auto-detects from its own data.
+const mixedVisibility = computeEntryModels(
+  {
+    pb: { yearly: sixYearValues },
+    dividend: { annual_dividend: 0.84 },
+    pe: { yearly: [24.9, 24.9, 24.9, 24.9, 24.9, undefined] },
+    pocf: { ocf_total: 300, yearly: [10, 10, 10, 10, 10, undefined] },
+    peg: { peg_ratio: 1.84 },
+  },
+  googlCompanyFinancials,
+  googlSharePrice,
+  googlDilutedShares,
+  DEFAULT_VALUATION_CONFIG,
+  { pb: 6, pe: 6 } // pocf deliberately omitted -> auto-detects 5 (its 6th slot is empty)
+);
+ok = assertClose(mixedVisibility.pb.avg5y, sixYearAvg, "computeEntryModels: PB visibleCounts.pb=6 averages all 6") && ok;
+ok = assertEqual(mixedVisibility.pe.avg5y, null, "computeEntryModels: PE visibleCounts.pe=6 with an empty 6th -> null") && ok;
+ok = assertClose(mixedVisibility.pocf.avg5y, 10, "computeEntryModels: POCF omitted from visibleCounts -> auto-detects 5-box average") && ok;
 
 console.log(ok ? "\nAll assertions passed." : "\nSome assertions FAILED.");
 if (!ok) process.exit(1);

@@ -111,6 +111,40 @@
 >    semantic tokens the rest of the app already uses. Admin page
 >    unchanged (explicitly out of scope for this fix).
 >
+> **Phase 3.2 addendum (2026-08-11) — small UX round, no DB/migration work.**
+> Owner-approved after eyeballing 3.1 live:
+>
+> 1. **Optional 6th year on every 5Y-average multiple block** (P/B, P/E,
+>    P/OCF). §2.1's "5Y average" fields are now 5-or-6: an unobtrusive
+>    "+ add year" link reveals a 6th box; "− remove 6th year" clears it and
+>    collapses back to 5. The average divides by however many boxes are
+>    currently visible, and the strictness is unchanged: any visible empty
+>    box nulls the average (and the signal) — this now also covers the
+>    6-box case, including the moment right after a student clicks "+ add
+>    year" and hasn't typed into it yet. The 6th value is just a new
+>    optional slot in the same `yearly` array already stored in
+>    `valuation_inputs` (no new top-level key, no migration) — reloading an
+>    evaluation with a stored 6th value re-expands that box automatically;
+>    an evaluation without one starts at 5, same as before Phase 3.2.
+> 2. **Paste-to-fill on those year boxes.** Pasting a whole row (tab-
+>    separated, like a spreadsheet copy) or a comma/whitespace-separated
+>    list into any one box splits it across that box and the ones after
+>    it — `$`, `%`, and `x`/`X` suffixes are stripped, thousands commas are
+>    stripped when they're actually grouping digits (not just separating
+>    values), and non-numeric tokens are skipped rather than aborting the
+>    whole paste. If the fill reaches the 6th box, it auto-expands. Pasting
+>    a single value (or something that doesn't parse into at least 2
+>    numbers) is left alone — normal single-field paste happens instead of
+>    the custom fill logic. See `parsePastedNumbers` and friends in
+>    `src/components/valuation-form.tsx`.
+> 3. **Implied entry price emphasis.** DCF's intrinsic value/share and
+>    every entry-price model's implied entry price now render in the same
+>    bordered/highlighted box (`ImpliedPriceBox` in
+>    `src/components/valuation-form.tsx`) — brand-accent border/background
+>    via the app's semantic color tokens, so it's the one consistent "this
+>    is the model's answer" visual across DCF, P/B, Dividend, P/E, and
+>    P/OCF, legible in both themes. Nothing else was restyled.
+>
 > Everything from here down is the original Phase 3 spec text.
 
 Source of truth for the sheet's mechanics: `friedd-snake-framework-spec.md` (same scratchpad folder). This spec extends that document into a buildable Phase 3 feature — the valuation page that hangs off a FRIEDD SNAKE evaluation (Phase 2, in progress).

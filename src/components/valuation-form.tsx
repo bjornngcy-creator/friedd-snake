@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import type { ClipboardEvent } from "react";
 import {
   bvpsRangeWarning,
   buildValuationSummaryRows,
@@ -59,6 +60,50 @@ const LINKS = {
   treasury: "https://www.marketwatch.com/investing/bond/tmubmusd10y",
   marketRiskPremium: "https://www.market-risk-premia.com/us.html",
 };
+
+// ---------------------------------------------------------------------------
+// Phase 3.2 item 2 — paste-to-fill for the 5Y/6Y yearly multiple boxes.
+// Pasting a whole spreadsheet row (or a stockanalysis.com copy) into any one
+// box should split it across that box and the ones after it. Pure functions,
+// no React, so they're easy to reason about independently of the paste event
+// plumbing below.
+// ---------------------------------------------------------------------------
+
+/**
+ * Strips a comma ONLY when it's acting as a thousands separator — glued
+ * directly to a 3-digit group followed by a non-digit or end-of-string
+ * (e.g. "1,234.56" -> "1234.56"). A comma followed by anything else (a
+ * space before the next number, e.g. "23.55, 22.97") is left alone: the
+ * delimiter split below treats it as a value separator either way, so
+ * there's nothing to "fix" there, and being conservative here avoids ever
+ * mangling a genuine list of small values.
+ */
+function stripThousandsCommas(text: string): string {
+  return text.replace(/,(?=\d{3}(?:\D|$))/g, "");
+}
+
+/** Splits pasted text on tabs, newlines, commas, and runs of whitespace — covers spreadsheet rows/columns, stockanalysis.com copies, and comma-separated lists alike. */
+function splitPasteTokens(text: string): string[] {
+  return stripThousandsCommas(text)
+    .split(/[\t\n\r,\s]+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0);
+}
+
+/** Parses one token into a number, stripping common copy-paste noise: a leading "$", a trailing "%" or "x"/"X" (e.g. "$23.55", "24.9%", "16.67x"). Returns null for anything that still isn't a finite number — garbage tokens are skipped, not fatal to the whole paste. */
+function parseNumericToken(token: string): number | null {
+  const cleaned = token.replace(/^\$+/, "").replace(/[%xX]+$/, "").trim();
+  if (cleaned === "") return null;
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Parses every numeric value out of a pasted blob, in order, skipping tokens that don't parse (spec: "fill the values that parse, skip tokens that don't"). */
+function parsePastedNumbers(text: string): number[] {
+  return splitPasteTokens(text)
+    .map(parseNumericToken)
+    .filter((n): n is number => n !== null);
+}
 
 // ---------------------------------------------------------------------------
 // Phase 3.1 item 4 — model-fit tooltip copy. Concise, plain-English, aimed
@@ -129,6 +174,46 @@ export function ValuationSection({
     });
   }
 
+  /** Phase 3.2 item 2 — fills several consecutive yearly slots (starting at `startIndex`) in one state update, so a multi-value paste is one re-render/autosave tick, not N. */
+  function setYearlyMany(model: "pb" | "pe" | "pocf", startIndex: number, values: number[]) {
+    setInputs((prev) => {
+      const current = prev.entry_models[model].yearly;
+      const next = [...current] as YearlyMultiple;
+      for (let i = 0; i < values.length; i++) {
+        const index = startIndex + i;
+        if (index > 5) break; // only 6 slots exist (0-5)
+        next[index] = values[i];
+      }
+      return { ...prev, entry_models: { ...prev.entry_models, [model]: { ...prev.entry_models[model], yearly: next } } };
+    });
+  }
+
+  // Phase 3.2 item 1 — the optional 6th yearly-multiple box, tracked per
+  // model (independent: expanding P/B's 6th year doesn't touch P/E's).
+  // Lazily initialized from the loaded evaluation, not the live `inputs`
+  // state: "storing a 6th value implies the box shows expanded on reload"
+  // is exactly this — decide once, from what was actually saved, then let
+  // the student's own add/remove clicks (and paste-driven auto-expand)
+  // take over from there.
+  const [showSixth, setShowSixthState] = useState<{ pb: boolean; pe: boolean; pocf: boolean }>(() => ({
+    pb: evaluation.inputs.entry_models.pb.yearly[5] != null,
+    pe: evaluation.inputs.entry_models.pe.yearly[5] != null,
+    pocf: evaluation.inputs.entry_models.pocf.yearly[5] != null,
+  }));
+
+  function setShowSixth(model: "pb" | "pe" | "pocf", value: boolean) {
+    setShowSixthState((prev) => (prev[model] === value ? prev : { ...prev, [model]: value }));
+  }
+
+  function handleAddSixthYear(model: "pb" | "pe" | "pocf") {
+    setShowSixth(model, true);
+  }
+
+  function handleRemoveSixthYear(model: "pb" | "pe" | "pocf") {
+    setYearly(model, 5, undefined);
+    setShowSixth(model, false);
+  }
+
   function setDividendField(value: number | undefined) {
     setInputs((prev) => ({
       ...prev,
@@ -171,9 +256,21 @@ export function ValuationSection({
         inputs.company_financials,
         evaluation.sharePrice,
         inputs.dcf.diluted_shares,
-        config
+        config,
+        {
+          pb: showSixth.pb ? 6 : 5,
+          pe: showSixth.pe ? 6 : 5,
+          pocf: showSixth.pocf ? 6 : 5,
+        }
       ),
-    [inputs.entry_models, inputs.company_financials, inputs.dcf.diluted_shares, evaluation.sharePrice, config]
+    [
+      inputs.entry_models,
+      inputs.company_financials,
+      inputs.dcf.diluted_shares,
+      evaluation.sharePrice,
+      config,
+      showSixth,
+    ]
   );
   const dcf = useMemo(
     () => computeDcf(inputs.dcf, evaluation.sharePrice, config),
@@ -211,11 +308,15 @@ export function ValuationSection({
             entryModels={entryModels}
             setCompanyField={setCompanyField}
             setYearly={setYearly}
+            setYearlyMany={setYearlyMany}
             setDividendField={setDividendField}
             setPocfOcfTotal={setPocfOcfTotal}
             setPegField={setPegField}
             sharePrice={evaluation.sharePrice}
             dilutedShares={inputs.dcf.diluted_shares}
+            showSixth={showSixth}
+            onAddSixthYear={handleAddSixthYear}
+            onRemoveSixthYear={handleRemoveSixthYear}
           />
         </div>
 
@@ -583,16 +684,18 @@ function DcfOutput({
         />
         <Stat label="Intrinsic value (total, $M)" value={formatMoney(dcf.intrinsicValueTotal)} />
         <div className="flex flex-col justify-center">
-          <span className="text-xs font-medium uppercase tracking-wide text-secondary">Intrinsic value / share</span>
-          <span className="mt-0.5 text-sm font-semibold text-foreground">${dcf.intrinsicValuePerShare.toFixed(2)}</span>
-        </div>
-        <div className="flex flex-col justify-center">
           <span className="text-xs font-medium uppercase tracking-wide text-secondary">DCF signal</span>
           <div className="mt-1">
             <SignalBadge signal={dcf.signal} />
           </div>
         </div>
       </div>
+
+      {/* Phase 3.2 item 3 — same highlighted-box treatment every entry-price
+          model uses for its implied entry price, applied here to DCF's own
+          headline number so "the output of this model" reads consistently
+          across the whole valuation section. */}
+      <ImpliedPriceBox label="Intrinsic value / share" value={dcf.intrinsicValuePerShare} />
     </div>
   );
 }
@@ -601,28 +704,39 @@ function DcfOutput({
 // Group 2 — Entry-Price Models + PEG (informational, secondary)
 // ---------------------------------------------------------------------------
 
+type YearlyModelKey = "pb" | "pe" | "pocf";
+type ShowSixthState = Record<YearlyModelKey, boolean>;
+
 function EntryModelsGroup({
   ticker,
   inputs,
   entryModels,
   setCompanyField,
   setYearly,
+  setYearlyMany,
   setDividendField,
   setPocfOcfTotal,
   setPegField,
   sharePrice,
   dilutedShares,
+  showSixth,
+  onAddSixthYear,
+  onRemoveSixthYear,
 }: {
   ticker: string;
   inputs: ValuationInputs;
   entryModels: EntryModelsResult;
   setCompanyField: (key: keyof CompanyFinancialsInputs, value: number | undefined) => void;
-  setYearly: (model: "pb" | "pe" | "pocf", index: number, value: number | undefined) => void;
+  setYearly: (model: YearlyModelKey, index: number, value: number | undefined) => void;
+  setYearlyMany: (model: YearlyModelKey, startIndex: number, values: number[]) => void;
   setDividendField: (value: number | undefined) => void;
   setPocfOcfTotal: (value: number | undefined) => void;
   setPegField: (value: number | undefined) => void;
   sharePrice: number | null;
   dilutedShares: number | null | undefined;
+  showSixth: ShowSixthState;
+  onAddSixthYear: (model: YearlyModelKey) => void;
+  onRemoveSixthYear: (model: YearlyModelKey) => void;
 }) {
   const bvpsWarning = bvpsRangeWarning(inputs.company_financials.book_value_per_share);
   const peWarning = epsRangeWarning(inputs.company_financials.eps);
@@ -665,8 +779,12 @@ function EntryModelsGroup({
           result={entryModels.pb}
           yearly={inputs.entry_models.pb.yearly}
           onYearlyChange={(i, v) => setYearly("pb", i, v)}
+          onYearlyFillMany={(start, values) => setYearlyMany("pb", start, values)}
           yearlySourceUrl={LINKS.ratios(ticker)}
           currentLabel="Current P/B"
+          showSixth={showSixth.pb}
+          onAddSixthYear={() => onAddSixthYear("pb")}
+          onRemoveSixthYear={() => onRemoveSixthYear("pb")}
           math={
             entryModels.pb.currentMultiple != null
               ? `Current P/B = price ÷ book value/share = $${sharePrice?.toFixed(2)} ÷ $${inputs.company_financials.book_value_per_share} = ${entryModels.pb.currentMultiple.toFixed(2)}x`
@@ -687,8 +805,12 @@ function EntryModelsGroup({
           result={entryModels.pe}
           yearly={inputs.entry_models.pe.yearly}
           onYearlyChange={(i, v) => setYearly("pe", i, v)}
+          onYearlyFillMany={(start, values) => setYearlyMany("pe", start, values)}
           yearlySourceUrl={LINKS.ratios(ticker)}
           currentLabel="Current P/E"
+          showSixth={showSixth.pe}
+          onAddSixthYear={() => onAddSixthYear("pe")}
+          onRemoveSixthYear={() => onRemoveSixthYear("pe")}
           math={
             entryModels.pe.currentMultiple != null
               ? `Current P/E = price ÷ EPS = $${sharePrice?.toFixed(2)} ÷ $${inputs.company_financials.eps} = ${entryModels.pe.currentMultiple.toFixed(2)}x`
@@ -702,8 +824,12 @@ function EntryModelsGroup({
           entryModels={entryModels}
           onOcfTotalChange={setPocfOcfTotal}
           onYearlyChange={(i, v) => setYearly("pocf", i, v)}
+          onYearlyFillMany={(start, values) => setYearlyMany("pocf", start, values)}
           sharePrice={sharePrice}
           dilutedShares={dilutedShares}
+          showSixth={showSixth.pocf}
+          onAddSixthYear={() => onAddSixthYear("pocf")}
+          onRemoveSixthYear={() => onRemoveSixthYear("pocf")}
         />
       </div>
 
@@ -731,20 +857,91 @@ function EntryModelsGroup({
   );
 }
 
+/**
+ * Phase 3.2 item 3 — a consistent, bordered/highlighted treatment for
+ * "the number this model is telling you to act on": DCF's intrinsic
+ * value/share and every entry-price model's implied entry price. Same
+ * component everywhere on purpose, so it reads as one visual language for
+ * "this is the output" across the whole valuation section — brand
+ * accent border/background via the semantic tokens (so it stays legible
+ * and on-brand in both themes), nothing else restyled.
+ */
+function ImpliedPriceBox({
+  label = "Implied entry price",
+  value,
+  placeholder = "Fill in the fields above to compute.",
+}: {
+  label?: string;
+  value: number | null;
+  placeholder?: string;
+}) {
+  return (
+    <div className="mt-3 rounded-lg border border-brand/25 bg-brand/[0.04] px-3 py-2.5 dark:border-accent/40 dark:bg-accent/[0.08]">
+      <span className="block text-[11px] font-semibold uppercase tracking-wide text-secondary">{label}</span>
+      {value != null ? (
+        <span className="mt-0.5 block text-xl font-bold text-brand dark:text-accent">${value.toFixed(2)}</span>
+      ) : (
+        <span className="mt-0.5 block text-sm text-tertiary">{placeholder}</span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Phase 3.2 item 1/2 — 5 (or 6, once expanded) yearly multiple boxes with
+ * an unobtrusive add/remove control for the optional 6th year, and
+ * paste-to-fill on every box (item 2): pasting a whole row/column splits
+ * across that box and the ones after it, auto-expanding to the 6th box
+ * when the fill reaches it.
+ */
 function YearlyInputs({
   yearly,
   onChange,
+  onFillMany,
   sourceUrl,
+  showSixth,
+  onAddSixthYear,
+  onRemoveSixthYear,
 }: {
   yearly: YearlyMultiple;
   onChange: (index: number, value: number | undefined) => void;
+  onFillMany: (startIndex: number, values: number[]) => void;
   sourceUrl: string;
+  showSixth: boolean;
+  onAddSixthYear: () => void;
+  onRemoveSixthYear: () => void;
 }) {
+  const visibleCount = showSixth ? 6 : 5;
+  const visibleYears = yearly.slice(0, visibleCount);
+
+  function handlePaste(index: number, e: ClipboardEvent<HTMLInputElement>) {
+    const text = e.clipboardData.getData("text");
+    const parsed = parsePastedNumbers(text);
+    // Fewer than 2 numbers parsed: nothing to "split", so don't intercept —
+    // let the browser's normal single-field paste happen (a lone pasted
+    // value, or unparseable text, behaves exactly like typing).
+    if (parsed.length <= 1) return;
+
+    e.preventDefault();
+    const maxSlots = 6;
+    const fillCount = Math.min(parsed.length, maxSlots - index);
+    onFillMany(index, parsed.slice(0, fillCount));
+    // If the fill reaches the 6th box (index 5), reveal it — matches "if 6
+    // numeric values are pasted, auto-expand the 6th box and fill it",
+    // generalized to any paste that reaches that far, not just a paste
+    // starting at box 1.
+    if (!showSixth && index + fillCount - 1 >= 5) onAddSixthYear();
+  }
+
   return (
     <div>
-      <span className="text-xs font-medium text-secondary">5Y average — one ratio per year</span>
-      <div className="mt-1 grid grid-cols-5 gap-1.5">
-        {yearly.map((v, i) => (
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-medium text-secondary">
+          {visibleCount}Y average — one ratio per year (paste a whole row to fill)
+        </span>
+      </div>
+      <div className={`mt-1 grid gap-1.5 ${visibleCount === 6 ? "grid-cols-6" : "grid-cols-5"}`}>
+        {visibleYears.map((v, i) => (
           <input
             key={i}
             type="number"
@@ -759,18 +956,38 @@ function YearlyInputs({
               const n = Number(raw);
               if (Number.isFinite(n)) onChange(i, n);
             }}
+            onPaste={(e) => handlePaste(i, e)}
             className="w-full rounded-md border border-amber-200 bg-[#fffdf2] px-1.5 py-1.5 text-center text-xs text-foreground shadow-sm transition focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand dark:border-amber-800/50 dark:bg-amber-950/20 dark:focus:border-accent dark:focus:ring-accent"
           />
         ))}
       </div>
-      <a
-        href={sourceUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="mt-1 inline-block text-xs text-tertiary underline decoration-dotted hover:text-brand dark:hover:text-accent"
-      >
-        Financials &gt; Ratios (5 fiscal years) ↗
-      </a>
+      <div className="mt-1 flex items-center justify-between gap-2">
+        <a
+          href={sourceUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-block text-xs text-tertiary underline decoration-dotted hover:text-brand dark:hover:text-accent"
+        >
+          Financials &gt; Ratios ({visibleCount} fiscal years) ↗
+        </a>
+        {showSixth ? (
+          <button
+            type="button"
+            onClick={onRemoveSixthYear}
+            className="whitespace-nowrap text-xs font-medium text-tertiary hover:text-red-600 dark:hover:text-red-400"
+          >
+            − remove 6th year
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={onAddSixthYear}
+            className="whitespace-nowrap text-xs font-medium text-brand hover:text-brand-dark dark:text-accent dark:hover:text-accent-dark"
+          >
+            + add year
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -781,8 +998,12 @@ function MultipleModelCard({
   result,
   yearly,
   onYearlyChange,
+  onYearlyFillMany,
   yearlySourceUrl,
   currentLabel,
+  showSixth,
+  onAddSixthYear,
+  onRemoveSixthYear,
   math,
 }: {
   title: string;
@@ -790,8 +1011,12 @@ function MultipleModelCard({
   result: MultipleModelResult;
   yearly: YearlyMultiple;
   onYearlyChange: (index: number, value: number | undefined) => void;
+  onYearlyFillMany: (startIndex: number, values: number[]) => void;
   yearlySourceUrl: string;
   currentLabel: string;
+  showSixth: boolean;
+  onAddSixthYear: () => void;
+  onRemoveSixthYear: () => void;
   math: string;
 }) {
   return (
@@ -804,25 +1029,25 @@ function MultipleModelCard({
         {result.signal && <SignalBadge signal={result.signal} />}
       </div>
       <div className="mt-3 space-y-3">
-        <YearlyInputs yearly={yearly} onChange={onYearlyChange} sourceUrl={yearlySourceUrl} />
+        <YearlyInputs
+          yearly={yearly}
+          onChange={onYearlyChange}
+          onFillMany={onYearlyFillMany}
+          sourceUrl={yearlySourceUrl}
+          showSixth={showSixth}
+          onAddSixthYear={onAddSixthYear}
+          onRemoveSixthYear={onRemoveSixthYear}
+        />
       </div>
       <div className="mt-3 space-y-1 text-xs text-secondary">
         <p>{math}</p>
         <p>
-          5Y average: <span className="font-medium text-foreground">{result.avg5y != null ? result.avg5y.toFixed(2) + "x" : "—"}</span>
+          {showSixth ? "6Y" : "5Y"} average: <span className="font-medium text-foreground">{result.avg5y != null ? result.avg5y.toFixed(2) + "x" : "—"}</span>
           {" · "}
           {currentLabel}: <span className="font-medium text-foreground">{result.currentMultiple != null ? result.currentMultiple.toFixed(2) + "x" : "—"}</span>
         </p>
       </div>
-      <p className="mt-3 text-sm">
-        {result.entryPrice != null ? (
-          <>
-            Implied entry price: <span className="font-semibold text-foreground">${result.entryPrice.toFixed(2)}</span>
-          </>
-        ) : (
-          <span className="text-tertiary">Fill in the fields above to compute.</span>
-        )}
-      </p>
+      <ImpliedPriceBox value={result.entryPrice} />
     </div>
   );
 }
@@ -859,15 +1084,7 @@ function DividendModelCard({
       <p className="mt-3 text-xs text-secondary">
         Entry price = annual dividend ÷ 5% assumed yield = ${inputs.entry_models.dividend.annual_dividend ?? "—"} ÷ 0.05
       </p>
-      <p className="mt-1 text-sm">
-        {result.entryPrice != null ? (
-          <>
-            Entry price: <span className="font-semibold text-foreground">${result.entryPrice.toFixed(2)}</span>
-          </>
-        ) : (
-          <span className="text-tertiary">Fill in the field above.</span>
-        )}
-      </p>
+      <ImpliedPriceBox label="Entry price" value={result.entryPrice} placeholder="Fill in the field above." />
     </div>
   );
 }
@@ -878,16 +1095,24 @@ function PocfModelCard({
   entryModels,
   onOcfTotalChange,
   onYearlyChange,
+  onYearlyFillMany,
   sharePrice,
   dilutedShares,
+  showSixth,
+  onAddSixthYear,
+  onRemoveSixthYear,
 }: {
   ticker: string;
   inputs: ValuationInputs;
   entryModels: EntryModelsResult;
   onOcfTotalChange: (value: number | undefined) => void;
   onYearlyChange: (index: number, value: number | undefined) => void;
+  onYearlyFillMany: (startIndex: number, values: number[]) => void;
   sharePrice: number | null;
   dilutedShares: number | null | undefined;
+  showSixth: boolean;
+  onAddSixthYear: () => void;
+  onRemoveSixthYear: () => void;
 }) {
   const result = entryModels.pocf;
   return (
@@ -907,7 +1132,15 @@ function PocfModelCard({
           sourceUrl={LINKS.cashFlow(ticker)}
           sourceLabel="Cash Flow Statement"
         />
-        <YearlyInputs yearly={inputs.entry_models.pocf.yearly} onChange={onYearlyChange} sourceUrl={LINKS.ratios(ticker)} />
+        <YearlyInputs
+          yearly={inputs.entry_models.pocf.yearly}
+          onChange={onYearlyChange}
+          onFillMany={onYearlyFillMany}
+          sourceUrl={LINKS.ratios(ticker)}
+          showSixth={showSixth}
+          onAddSixthYear={onAddSixthYear}
+          onRemoveSixthYear={onRemoveSixthYear}
+        />
       </div>
       <div className="mt-3 space-y-1 text-xs text-secondary">
         <p>
@@ -923,18 +1156,10 @@ function PocfModelCard({
             : "—"}
         </p>
         <p>
-          5Y average: <span className="font-medium text-foreground">{result.avg5y != null ? result.avg5y.toFixed(2) + "x" : "—"}</span>
+          {showSixth ? "6Y" : "5Y"} average: <span className="font-medium text-foreground">{result.avg5y != null ? result.avg5y.toFixed(2) + "x" : "—"}</span>
         </p>
       </div>
-      <p className="mt-3 text-sm">
-        {result.entryPrice != null ? (
-          <>
-            Implied entry price: <span className="font-semibold text-foreground">${result.entryPrice.toFixed(2)}</span>
-          </>
-        ) : (
-          <span className="text-tertiary">Fill in the fields above to compute.</span>
-        )}
-      </p>
+      <ImpliedPriceBox value={result.entryPrice} />
     </div>
   );
 }

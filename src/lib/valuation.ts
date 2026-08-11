@@ -75,8 +75,18 @@ export type CagrHelperInputs = {
   years: number | null | undefined;
 };
 
-/** 5 yearly multiple readings (any order the student wants — averaged, not chronologically validated). Always exactly 5 slots; blanks are `undefined`. */
+/**
+ * 5 (or optionally 6) yearly multiple readings (any order the student
+ * wants — averaged, not chronologically validated). Always exactly 6
+ * slots; blanks are `undefined`. Slot 5 (the 6th year) is optional — Phase
+ * 3.2 item 1 adds an unobtrusive "+ add year" control per model that
+ * reveals it. Whether it's currently averaged in is a `visibleCount`
+ * concern (see `averageYearly`), not something this type encodes on its
+ * own: an empty slot 5 is indistinguishable from "never expanded" at the
+ * data level, which is intentional (see `averageYearly`'s docs).
+ */
 export type YearlyMultiple = [
+  number | null | undefined,
   number | null | undefined,
   number | null | undefined,
   number | null | undefined,
@@ -84,8 +94,11 @@ export type YearlyMultiple = [
   number | null | undefined,
 ];
 
+/** How many of a `YearlyMultiple`'s slots are currently part of the average — 5 (the default) or 6 once a student has added the optional 6th year. */
+export type YearlyVisibleCount = 5 | 6;
+
 function emptyYearly(): YearlyMultiple {
-  return [undefined, undefined, undefined, undefined, undefined];
+  return [undefined, undefined, undefined, undefined, undefined, undefined];
 }
 
 export type EntryModelInputs = {
@@ -165,7 +178,7 @@ function numOrUndefined(v: unknown): number | undefined {
 function normalizeYearly(raw: unknown): YearlyMultiple {
   const arr = Array.isArray(raw) ? raw : [];
   const out = emptyYearly();
-  for (let i = 0; i < 5; i++) out[i] = numOrUndefined(arr[i]);
+  for (let i = 0; i < 6; i++) out[i] = numOrUndefined(arr[i]);
   return out;
 }
 
@@ -352,10 +365,31 @@ export function computePegVerdict(pegRatio: number | null | undefined): Signal |
   return "Fair Value";
 }
 
-/** Average of a YearlyMultiple — requires all 5 slots filled (a partial average isn't a meaningful "5-year average"). */
-export function averageYearly(values: YearlyMultiple): number | null {
+/**
+ * Average of a YearlyMultiple over its currently-visible slots — requires
+ * EVERY visible slot to be filled (a partial average isn't a meaningful
+ * "N-year average"); the guard from Phase 3.1 extends unchanged to 6 boxes.
+ *
+ * `visibleCount` (Phase 3.2 item 1) is how many of the 6 slots currently
+ * count:
+ *   - Explicit `5` or `6` — passed by the live UI, which knows the true
+ *     on-screen state. This is what makes a freshly-revealed, still-empty
+ *     6th box null the average immediately (slot 5 is "visible but empty"
+ *     even though nothing has been typed into it yet, and nothing has been
+ *     persisted for it either) — a case no purely data-driven rule could
+ *     distinguish from "6th box was never added".
+ *   - Omitted — auto-detected from the data itself: 6 if slot 5 holds a
+ *     value, else 5. This is what every consumer WITHOUT a live UI uses
+ *     (the dashboard's recomputed badge, scripts/verify-valuation.mjs):
+ *     "storing a 6th value implies the box shows expanded on reload" is
+ *     exactly this rule, and it's the only signal a stored-data-only
+ *     reader has available.
+ */
+export function averageYearly(values: YearlyMultiple, visibleCount?: YearlyVisibleCount): number | null {
+  const count = visibleCount ?? (isNum(values[5]) ? 6 : 5);
   const nums: number[] = [];
-  for (const v of values) {
+  for (let i = 0; i < count; i++) {
+    const v = values[i];
     if (!isNum(v)) return null;
     nums.push(v);
   }
@@ -382,9 +416,10 @@ export type MultipleModelResult = {
 function multipleModelResult(
   perShareFundamental: number | null,
   yearly: YearlyMultiple,
-  sharePrice: number | null | undefined
+  sharePrice: number | null | undefined,
+  visibleCount?: YearlyVisibleCount
 ): MultipleModelResult {
-  const avg5y = averageYearly(yearly);
+  const avg5y = averageYearly(yearly, visibleCount);
   const currentMultiple =
     perShareFundamental != null && perShareFundamental > 0 && isNum(sharePrice) && sharePrice > 0
       ? sharePrice / perShareFundamental
@@ -411,17 +446,19 @@ function multipleModelResult(
 export function computePbModel(
   bookValuePerShare: number | null | undefined,
   yearly: YearlyMultiple,
-  sharePrice: number | null | undefined
+  sharePrice: number | null | undefined,
+  visibleCount?: YearlyVisibleCount
 ): MultipleModelResult {
-  return multipleModelResult(isNum(bookValuePerShare) ? bookValuePerShare : null, yearly, sharePrice);
+  return multipleModelResult(isNum(bookValuePerShare) ? bookValuePerShare : null, yearly, sharePrice, visibleCount);
 }
 
 export function computePeModel(
   eps: number | null | undefined,
   yearly: YearlyMultiple,
-  sharePrice: number | null | undefined
+  sharePrice: number | null | undefined,
+  visibleCount?: YearlyVisibleCount
 ): MultipleModelResult {
-  return multipleModelResult(isNum(eps) ? eps : null, yearly, sharePrice);
+  return multipleModelResult(isNum(eps) ? eps : null, yearly, sharePrice, visibleCount);
 }
 
 /**
@@ -435,14 +472,16 @@ export function computePocfModel(
   ocfTotal: number | null | undefined,
   yearly: YearlyMultiple,
   dilutedShares: number | null | undefined,
-  sharePrice: number | null | undefined
+  sharePrice: number | null | undefined,
+  visibleCount?: YearlyVisibleCount
 ): MultipleModelResult {
   const ocfPerShare =
     isNum(ocfTotal) && isNum(dilutedShares) && dilutedShares > 0 ? ocfTotal / dilutedShares : null;
   return multipleModelResult(
     ocfPerShare != null && Number.isFinite(ocfPerShare) ? ocfPerShare : null,
     yearly,
-    sharePrice
+    sharePrice,
+    visibleCount
   );
 }
 
@@ -456,12 +495,26 @@ export type EntryModelsResult = {
   ocfPerShare: number | null;
 };
 
+/**
+ * Phase 3.2 item 1 — how many of each multiple model's 6 yearly slots are
+ * currently visible on screen. Every field is optional and independent
+ * (a student can expand P/B's 6th year without touching P/E's). Omitted
+ * entirely by callers with no live UI (the dashboard, verify-valuation.mjs)
+ * — see `averageYearly`'s docs for what happens then.
+ */
+export type YearlyVisibleCounts = {
+  pb?: YearlyVisibleCount;
+  pe?: YearlyVisibleCount;
+  pocf?: YearlyVisibleCount;
+};
+
 export function computeEntryModels(
   inputs: EntryModelInputs,
   companyFinancials: CompanyFinancialsInputs,
   sharePrice: number | null | undefined,
   dilutedShares: number | null | undefined,
-  config: ValuationConfig
+  config: ValuationConfig,
+  visibleCounts?: YearlyVisibleCounts
 ): EntryModelsResult {
   const ocfPerShare =
     isNum(inputs.pocf.ocf_total) && isNum(dilutedShares) && dilutedShares > 0
@@ -469,14 +522,20 @@ export function computeEntryModels(
       : null;
 
   return {
-    pb: computePbModel(companyFinancials.book_value_per_share, inputs.pb.yearly, sharePrice),
+    pb: computePbModel(companyFinancials.book_value_per_share, inputs.pb.yearly, sharePrice, visibleCounts?.pb),
     dividend: computeDividendModel(
       inputs.dividend.annual_dividend,
       sharePrice,
       config.dividend_yield_assumption
     ),
-    pe: computePeModel(companyFinancials.eps, inputs.pe.yearly, sharePrice),
-    pocf: computePocfModel(inputs.pocf.ocf_total, inputs.pocf.yearly, dilutedShares, sharePrice),
+    pe: computePeModel(companyFinancials.eps, inputs.pe.yearly, sharePrice, visibleCounts?.pe),
+    pocf: computePocfModel(
+      inputs.pocf.ocf_total,
+      inputs.pocf.yearly,
+      dilutedShares,
+      sharePrice,
+      visibleCounts?.pocf
+    ),
     pegVerdict: computePegVerdict(inputs.peg.peg_ratio),
     ocfPerShare: ocfPerShare != null && Number.isFinite(ocfPerShare) ? ocfPerShare : null,
   };

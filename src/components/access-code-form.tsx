@@ -21,7 +21,7 @@ export function AccessCodeForm() {
           required
           autoComplete="off"
           autoFocus
-          className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm tracking-wide focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+          className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm tracking-wide focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
         />
       </div>
 
@@ -34,7 +34,7 @@ export function AccessCodeForm() {
       <button
         type="submit"
         disabled={pending}
-        className="w-full rounded-md bg-brand px-4 py-2 text-sm font-medium text-white transition hover:bg-brand-dark disabled:opacity-60"
+        className="w-full rounded-md bg-brand px-4 py-2 text-sm font-medium text-accent transition hover:bg-brand-dark disabled:opacity-60"
       >
         {pending ? "Checking…" : "Unlock this month"}
       </button>

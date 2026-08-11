@@ -115,13 +115,13 @@ export default async function EvaluationPage({
 function ErrorState({ message, ticker }: { message: string; ticker?: string }) {
   return (
     <div className="mx-auto max-w-md rounded-xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-      <h1 className="text-lg font-semibold text-slate-900">
+      <h1 className="font-serif text-lg text-foreground">
         {ticker ? `Couldn't load ${ticker}` : "Couldn't load evaluation"}
       </h1>
       <p className="mt-2 text-sm text-slate-500">{message}</p>
       <a
         href="/dashboard"
-        className="mt-6 inline-block rounded-md bg-brand px-4 py-2 text-sm font-medium text-white transition hover:bg-brand-dark"
+        className="mt-6 inline-block rounded-md bg-brand px-4 py-2 text-sm font-medium text-accent transition hover:bg-brand-dark"
       >
         Back to dashboard
       </a>

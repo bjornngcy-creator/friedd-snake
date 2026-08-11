@@ -22,11 +22,11 @@ export function TickerQuickInput({ className }: { className?: string }) {
         placeholder="Ticker, e.g. GOOGL"
         aria-label="Ticker symbol"
         maxLength={10}
-        className="w-40 rounded-md border border-slate-300 px-3 py-2 text-sm uppercase tracking-wide focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+        className="w-40 rounded-md border border-slate-300 px-3 py-2 text-sm uppercase tracking-wide focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
       />
       <button
         type="submit"
-        className="whitespace-nowrap rounded-md bg-brand px-4 py-2 text-sm font-medium text-white transition hover:bg-brand-dark"
+        className="whitespace-nowrap rounded-md bg-brand px-4 py-2 text-sm font-medium text-accent transition hover:bg-brand-dark"
       >
         New evaluation
       </button>

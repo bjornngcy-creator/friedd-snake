@@ -1,4 +1,4 @@
-# CLAUDE.md — BPC Stock Evaluator
+# CLAUDE.md — Equity Compass (FRIEDD SNAKE Evaluator)
 
 Project brief for Claude sessions working in this repo. No secrets here — variable
 names only. Real values live in `.env.local` (gitignored) or the owner's Supabase /

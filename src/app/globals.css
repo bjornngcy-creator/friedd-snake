@@ -1,10 +1,14 @@
 @import "tailwindcss";
 
+/* Invest With Bjorn brand palette (01-SKILLS/brand-guide.md v1.1) */
 :root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
-  --brand: #0b4f3f;
-  --brand-dark: #08382d;
+  --background: #f5f3ee; /* Warm Off-white */
+  --foreground: #1a2636; /* Midnight Navy */
+  --brand: #1a2636; /* Midnight Navy — primary */
+  --brand-dark: #10161f; /* Navy, darkened for hover */
+  --accent: #d4a93c; /* Wealth Gold — CTAs, borders, headlines on dark */
+  --accent-dark: #aa8730; /* Gold, darkened for hover */
+  --muted: #8fa3bc; /* Steel Muted — secondary text on dark */
 }
 
 @theme inline {
@@ -12,7 +16,11 @@
   --color-foreground: var(--foreground);
   --color-brand: var(--brand);
   --color-brand-dark: var(--brand-dark);
-  --font-sans: var(--font-inter);
+  --color-accent: var(--accent);
+  --color-accent-dark: var(--accent-dark);
+  --color-muted: var(--muted);
+  --font-sans: var(--font-dm-sans);
+  --font-serif: var(--font-dm-serif);
 }
 
 body {

@@ -11,7 +11,7 @@ export default function LoginPage() {
 
   return (
     <div>
-      <h1 className="text-xl font-semibold text-slate-900">Log in</h1>
+      <h1 className="font-serif text-2xl text-foreground">Log in</h1>
       <p className="mt-1 text-sm text-slate-500">
         Welcome back to your stock evaluator.
       </p>
@@ -27,7 +27,7 @@ export default function LoginPage() {
             type="email"
             required
             autoComplete="email"
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
           />
         </div>
 
@@ -41,7 +41,7 @@ export default function LoginPage() {
             type="password"
             required
             autoComplete="current-password"
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
           />
         </div>
 
@@ -54,7 +54,7 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={pending}
-          className="w-full rounded-md bg-brand px-4 py-2 text-sm font-medium text-white transition hover:bg-brand-dark disabled:opacity-60"
+          className="w-full rounded-md bg-brand px-4 py-2 text-sm font-medium text-accent transition hover:bg-brand-dark disabled:opacity-60"
         >
           {pending ? "Logging in…" : "Log in"}
         </button>

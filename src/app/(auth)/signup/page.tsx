@@ -11,7 +11,7 @@ export default function SignupPage() {
 
   return (
     <div>
-      <h1 className="text-xl font-semibold text-slate-900">Sign up</h1>
+      <h1 className="font-serif text-2xl text-foreground">Sign up</h1>
       <p className="mt-1 text-sm text-slate-500">
         Create your account to start evaluating stocks.
       </p>
@@ -27,7 +27,7 @@ export default function SignupPage() {
             type="email"
             required
             autoComplete="email"
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
           />
         </div>
 
@@ -42,7 +42,7 @@ export default function SignupPage() {
             required
             minLength={6}
             autoComplete="new-password"
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
           />
           <p className="mt-1 text-xs text-slate-400">At least 6 characters.</p>
         </div>
@@ -56,7 +56,7 @@ export default function SignupPage() {
         <button
           type="submit"
           disabled={pending}
-          className="w-full rounded-md bg-brand px-4 py-2 text-sm font-medium text-white transition hover:bg-brand-dark disabled:opacity-60"
+          className="w-full rounded-md bg-brand px-4 py-2 text-sm font-medium text-accent transition hover:bg-brand-dark disabled:opacity-60"
         >
           {pending ? "Creating account…" : "Sign up"}
         </button>

@@ -1,10 +1,11 @@
-# BPC Stock Evaluator
+# Equity Compass — FRIEDD SNAKE Evaluator
 
 Phase 1: scaffold, auth, and the monthly access-code gate. Phase 2: the
-FRIEDD SNAKE evaluation tool itself (the app's name is BPC Stock Evaluator;
-FRIEDD SNAKE is the name of the scoring framework it implements). Built for
-~150 Invest With Bjorn students. This README is written for the owner, not a
-developer — follow it top to bottom the first time you set this up.
+FRIEDD SNAKE evaluation tool itself (the app's name is Equity Compass,
+subtitled "FRIEDD SNAKE Evaluator"; FRIEDD SNAKE is the name of the scoring
+framework it implements). Built for ~150 Invest With Bjorn students. This
+README is written for the owner, not a developer — follow it top to bottom
+the first time you set this up.
 
 Setting up on a brand-new computer? Use `docs/SETUP.md` for the short version.
 This README covers the full picture, including Supabase setup and monthly

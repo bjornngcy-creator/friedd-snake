@@ -37,7 +37,7 @@ export default async function DashboardPage() {
     <div>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Hi, {greetingName}</h1>
+          <h1 className="font-serif text-2xl text-foreground">Hi, {greetingName}</h1>
           <p className="mt-1 text-sm text-slate-500">Your FRIEDD SNAKE evaluations.</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -47,7 +47,7 @@ export default async function DashboardPage() {
               href={framework.definition.equity_scope_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="whitespace-nowrap rounded-md border border-brand px-4 py-2 text-sm font-medium text-brand transition hover:bg-brand hover:text-white"
+              className="whitespace-nowrap rounded-md border border-brand px-4 py-2 text-sm font-medium text-brand transition hover:bg-brand hover:text-accent"
             >
               Equity Scope ↗
             </a>
@@ -78,7 +78,7 @@ function StatCard({ label, value, accent }: { label: string; value: number; acce
 function EmptyState() {
   return (
     <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center">
-      <h2 className="text-lg font-semibold text-slate-900">Run your first evaluation</h2>
+      <h2 className="font-serif text-lg text-foreground">Run your first evaluation</h2>
       <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
         FRIEDD SNAKE scores a company on financial health, moats, and risk in three simple steps.
       </p>
@@ -107,7 +107,7 @@ function EmptyState() {
 function Step({ number, title, description }: { number: number; title: string; description: string }) {
   return (
     <li className="rounded-lg border border-slate-200 p-4">
-      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-brand text-xs font-bold text-white">
+      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-brand text-xs font-bold text-accent">
         {number}
       </span>
       <p className="mt-2 font-medium text-slate-900">{title}</p>

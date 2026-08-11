@@ -14,7 +14,7 @@ export default async function AdminPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold text-slate-900">Admin</h1>
+      <h1 className="font-serif text-2xl text-foreground">Admin</h1>
       <p className="mt-2 text-slate-500">
         Access-code rotation and student management are coming in a later
         phase. For now, set the monthly code with{" "}

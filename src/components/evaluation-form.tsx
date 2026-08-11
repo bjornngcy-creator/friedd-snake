@@ -218,7 +218,7 @@ function EvaluationHeader({ evaluation, today }: { evaluation: EvaluationData; t
       <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-baseline gap-3">
-            <h1 className="text-2xl font-semibold text-slate-900">{evaluation.ticker}</h1>
+            <h1 className="font-serif text-2xl text-foreground">{evaluation.ticker}</h1>
             <span className="text-slate-500">{evaluation.companyName}</span>
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-500">
@@ -259,7 +259,7 @@ function GroupCard({
     <section className="rounded-2xl border-2 border-slate-200 bg-slate-50/70 p-5 shadow-sm sm:p-6">
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 pb-4">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-slate-900">{group.title}</h2>
+          <h2 className="font-serif text-xl text-foreground">{group.title}</h2>
           {group.subtitle && <p className="text-sm text-slate-500">{group.subtitle}</p>}
         </div>
 
@@ -268,7 +268,7 @@ function GroupCard({
             href={equityScopeUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex shrink-0 items-center justify-center rounded-md border border-brand px-3 py-1.5 text-xs font-medium text-brand transition hover:bg-brand hover:text-white"
+            className="inline-flex shrink-0 items-center justify-center rounded-md border border-brand px-3 py-1.5 text-xs font-medium text-brand transition hover:bg-brand hover:text-accent"
           >
             {group.equity_scope_note} ↗
           </a>
@@ -397,8 +397,8 @@ function ScaleInput({
             onClick={() => onChange(selected ? undefined : option.value)}
             className={`min-w-[64px] rounded-md border px-3 py-2 text-xs font-semibold transition ${
               selected
-                ? "border-brand bg-brand text-white"
-                : "border-amber-200 bg-[#FFFBEA] text-slate-600 hover:border-brand hover:text-brand"
+                ? "border-brand bg-brand text-accent"
+                : "border-slate-200 bg-white text-slate-600 hover:border-brand hover:text-brand"
             }`}
           >
             {option.label}
@@ -445,8 +445,8 @@ function FlagInput({
           onClick={() => onChange(option.selected ? undefined : option.val)}
           className={`min-w-[64px] rounded-md border px-3 py-2 text-xs font-semibold transition ${
             option.selected
-              ? "border-brand bg-brand text-white"
-              : "border-amber-200 bg-[#FFFBEA] text-slate-600 hover:border-brand hover:text-brand"
+              ? "border-brand bg-brand text-accent"
+              : "border-slate-200 bg-white text-slate-600 hover:border-brand hover:text-brand"
           }`}
         >
           {option.label}
@@ -595,7 +595,7 @@ function ScorePanel({
               type="button"
               onClick={onMarkComplete}
               disabled={missingCount > 0 || completionPending}
-              className="w-full rounded-md bg-brand px-3 py-2 text-xs font-semibold text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+              className="w-full rounded-md bg-brand px-3 py-2 text-xs font-semibold text-accent transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
             >
               {completionPending ? "Marking…" : "Mark as complete"}
             </button>

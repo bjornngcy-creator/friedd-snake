@@ -107,13 +107,10 @@ Vercel. No manual deploy step.
   localStorage-persisted, no-flash init script in `src/app/layout.tsx`).
   Spec: `docs/phase3-valuation-spec.md` (Phase 3.1 addendum at the top, DCF
   math/GOOGL worked example unchanged).
-  - **Migration `0008_generic_section_titles.sql`: written, NOT yet
-    applied** (no DB access in this build session — no `SUPABASE_DB_PASSWORD`).
-    Guarded the same way as 0004/0005: checks the current `display.groups`
-    really is the pre-3.1 shape before overwriting, so a hand-edited or
-    already-different `display` block makes it a no-op. Run
-    `npm run db-migrate` once real credentials are available. **This is no
-    longer a deploy-ordering hazard** (see QA fix round below) —
+  - **Migration `0008_generic_section_titles.sql`: APPLIED to remote
+    2026-08-11** (verified in the DB: group titles "Quantitative Analysis" /
+    "Qualitative Analysis", tables Risks + Economic Moats). Guarded the same
+    way as 0004/0005. **Not a deploy-ordering hazard** —
     `src/lib/display-groups.ts` tolerates both the pre-3.1 and current
     `display.groups` shapes at runtime, so the migration can be applied
     before or after this code ships without breaking the evaluation page
@@ -129,10 +126,8 @@ Vercel. No manual deploy step.
     `computeValuationSummary` assertions — the GOOGL DCF numbers
     (discount rate, Year 1 FCF/PV, sum of PV, net debt, intrinsic
     value/share $258.34) are byte-identical to the Phase 3 golden test.
-  - **Not yet owner-reviewed:** the tooltip copy (5 models) and all new
-    student-facing microcopy (negative-FCF note, 4 soft warnings, CAGR
-    guideline) need an owner pass before this goes live — see the Phase 3.1
-    build session's report for the full copy.
+  - **Owner-reviewed 2026-08-11:** tooltip copy (5 models) and all new
+    student-facing microcopy approved as drafted at the Phase 3.1 checkpoint.
   - **Adversarial QA (2026-08-11): fix-first round applied.** Golden tests,
     engine math, migration 0008 guards, RLS, and pedagogy verified clean;
     6 issues required fixes before this is deployable:
@@ -166,9 +161,29 @@ Vercel. No manual deploy step.
     6. **LOW — lingering legacy-debt note, fixed.** The "migrated from your
        old total" note now clears as soon as the student edits any of the
        4 debt/lease fields, instead of persisting until the next reload.
-    Negative-FCF behavior and the badge's sort order were explicitly out of
-    scope for this round (both stand as built). Fix commit:
-    see git log — committed locally, not pushed.
+    Negative-FCF behavior (inputs editable, DCF output refused with a
+    teaching note) and the badge's count-based sort order were both
+    confirmed by the owner at the checkpoint.
+  **Phase 3.1 status: LIVE, owner-approved 2026-08-11** (commits `3d82791`,
+  `e3231d8`, `c0d2bb7` pushed; migration 0008 applied; owner eyeballed live).
+- **Phase 3.2 — 5Y-average UX round: LIVE, owner-approved 2026-08-11.**
+  Commit `d0abcd1`: optional 6th year box per multiple (average divides by
+  visible boxes, strict all-visible-filled-or-null rule extended),
+  paste-to-fill on the year boxes (tab/comma/whitespace rows, strips
+  `$`/`%`/`x`/thousands-commas, auto-expands the 6th box on a 6-value paste),
+  and a consistent bordered `ImpliedPriceBox` on every model's implied entry
+  price / DCF intrinsic value. Adversarial QA: ship-ready, no fix round
+  needed. Known accepted quirks: single-value messy pastes (e.g. `$1,000`
+  alone) fall to native paste and are rejected by the number input;
+  European-style `12,5` decimals parse as two values.
+- **Phase 3.3 — visual backlog (logged 2026-08-11, NOT started; owner wants
+  these eventually, not urgent):**
+  1. At narrow window widths the valuation summary disappears entirely —
+     it should remain reachable at every viewport width.
+  2. When the summary IS shown at narrow width, the 5-6 yearly-multiple
+     boxes get so tight the numbers are unreadable — needs a responsive
+     layout fix (wrap the boxes, or stack summary/inputs) so year values
+     stay legible with the summary visible.
 - **Phase 4** — Portfolio plan. Not started.
 - **Phase 5** — Admin panel: framework editor (for `framework_versions`) + access-code
   rotation UI (replacing the current CLI/SQL-only flow). Not started.
